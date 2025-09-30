@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
+import MRIDataset
 
 def encoder_block(in_channels, out_channels):
     return nn.Sequential(
