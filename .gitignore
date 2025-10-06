@@ -1,1 +1,3 @@
 /swimseg-2
+*.pycache
+*__pycache__

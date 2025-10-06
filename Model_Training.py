@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 from torch.utils.data import random_split
 import os
 
-image_dir = ""
-mask_dir = ""
-
 num_epochs = 10
 
 def dice_loss(model_output, masks, smooth=1.0): # model_output : the predicted mask by the model (an image of 0 and 1, non aliased and aliased pixels)
@@ -17,10 +14,17 @@ def dice_loss(model_output, masks, smooth=1.0): # model_output : the predicted m
     dice = (2 * intersection + smooth) / (model_output.sum(dim=(1, 2, 3)) + masks.sum(dim=(1, 2, 3)) + smooth) # we sum on all channels, height, width because the tensor has the dimensions : batch size, channels, height, width
     return 1 - dice.mean()
 
+running_device = ""
+if torch.cuda.is_available():
+    print("CUDA available so running on GPU")
+    running_device = "cuda"
+else:
+    print("CUDA not available so running on CPU")
+    running_device = "cpu"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = UNET.UNET(in_channels=1, out_channels=1, init_features=32).to(device)  # out_channels=1 pour segmentation binaire
+model = UNET.UNET(in_channels=3, out_channels=1, init_features=32).to(device) # out_channels=1 for binary segmentation
 
-criterion = dice_loss()
+criterion = dice_loss
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 data_preprocessing = transforms.Compose([
@@ -42,26 +46,30 @@ test_transform = transforms.Compose([
     transforms.Normalize(mean=[0.5], std=[0.5]) # normalizing
 ])
 
-all_images_fils_names = os.listdir(image_dir)
-all_masks_file_names = os.listdir(mask_dir)
-
+mask_transform = transforms.Compose([
+    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
+    transforms.ToTensor()
+])
 
 train_dataset = MRIDataset.MRIDataset(
-    image_dir="",
-    mask_dir="",
-    transform=data_preprocessing
+    image_dir="swimseg-2/train",
+    mask_dir="swimseg-2/train_labels",
+    image_transform=data_preprocessing,
+    mask_transform=mask_transform
 )
 
 val_dataset = MRIDataset.MRIDataset(
-    image_dir="",
-    mask_dir="",
-    transform=validation_transform # validation transform so no data augmentation
+    image_dir="swimseg-2/val",
+    mask_dir="swimseg-2/val_labels",
+    image_transform=validation_transform, # validation transform so no data augmentation
+    mask_transform=mask_transform
 )
 
 test_dataset = MRIDataset.MRIDataset(
-    image_dir="",
-    mask_dir="",
-    transform=test_transform # validation transform so no data augmentation
+    image_dir="swimseg-2/test",
+    mask_dir="swimseg-2/test_labels",
+    image_transform=test_transform, # test transform so no data augmentation
+    mask_transform=mask_transform
 )
 
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True)
@@ -69,6 +77,7 @@ val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, shuffle=Fal
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 for epoch in range(num_epochs):
+    print(f"Starting epoch {epoch + 1}/{num_epochs}")
     model.train()
     for images, masks in train_loader: # do batch by batch the training
         images, masks = images.to(device), masks.to(device)
