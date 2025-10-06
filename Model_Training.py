@@ -4,6 +4,11 @@ from torchvision import datasets, transforms
 import torch.optim as optim
 import MRIDataset
 import matplotlib.pyplot as plt
+from torch.utils.data import random_split
+import os
+
+image_dir = ""
+mask_dir = ""
 
 num_epochs = 10
 
@@ -25,17 +30,47 @@ data_preprocessing = transforms.Compose([
     # we can add here data augmentation on the training set
 ])
 
+validation_transform = transforms.Compose([
+    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5], std=[0.5]) # normalizing
+])
+
+test_transform = transforms.Compose([
+    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5], std=[0.5]) # normalizing
+])
+
+all_images_fils_names = os.listdir(image_dir)
+all_masks_file_names = os.listdir(mask_dir)
+
+
 train_dataset = MRIDataset.MRIDataset(
     image_dir="",
     mask_dir="",
     transform=data_preprocessing
 )
 
+val_dataset = MRIDataset.MRIDataset(
+    image_dir="",
+    mask_dir="",
+    transform=validation_transform # validation transform so no data augmentation
+)
+
+test_dataset = MRIDataset.MRIDataset(
+    image_dir="",
+    mask_dir="",
+    transform=test_transform # validation transform so no data augmentation
+)
+
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True)
+val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, shuffle=False)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 for epoch in range(num_epochs):
     model.train()
-    for images, masks in train_loader:
+    for images, masks in train_loader: # do batch by batch the training
         images, masks = images.to(device), masks.to(device)
         outputs = model(images)
         loss = criterion(outputs, masks) # loss which measures the ratio of overlapping correct predicted pixels
@@ -46,7 +81,7 @@ for epoch in range(num_epochs):
 
     # Validation
     model.eval()
-    val_loss = 0.0
+    val_loss = 0
 
     with torch.no_grad():
         for images, masks in val_loader:
@@ -55,8 +90,19 @@ for epoch in range(num_epochs):
             outputs = model(images)
             loss = criterion(outputs, masks)
             val_loss += loss.item()
-    val_loss = val_loss/len(val_loader) # average validation loss
+    val_loss = val_loss / len(val_loader) # average validation loss over all the validation dataset
     print(f"Validation loss: {val_loss:.4f}")
+
+# Testing once the model is trained
+model.eval()
+test_loss = 0
+
+with torch.no_grad():
+    for images, masks in test_loader:
+        outputs = model(images.to(device))
+        test_loss += criterion(outputs, masks.to(device)).item()
+    test_loss = test_loss / len(test_loader)
+print(f"Test Loss: {test_loss:.4f}")
 
 def plot_results(image, mask, pred_mask):
     plt.figure(figsize=(12, 4))
