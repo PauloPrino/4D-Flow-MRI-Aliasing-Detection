@@ -92,6 +92,6 @@ class UNET(nn.Module):
         d4 = self.decoder4(d4)
 
         output = self.final_conv(d4)
-        output = torch.sigmoid(output) # because want a binary output : 0 no aliasing and 1 aliasing
+        #output = torch.sigmoid(output) # because want a binary output : 0 no aliasing and 1 aliasing
 
         return output

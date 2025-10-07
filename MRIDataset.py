@@ -19,7 +19,7 @@ class MRIDataset(Dataset):
         img_path = os.path.join(self.image_dir, self.image_filenames[idx])
         mask_path = os.path.join(self.mask_dir, self.image_filenames[idx]) # we assume that the masks have the same filenames as the images
         
-        image = plt.imread(img_path)
+        image = plt.imread(img_path) # loading the image as a numpy array
         mask = plt.imread(mask_path)
 
         # Normalize and convert to uint8
@@ -28,13 +28,16 @@ class MRIDataset(Dataset):
         if mask.dtype == 'float32' or mask.dtype == 'float64':
             mask = (255 * mask).astype('uint8')
 
-        image = Image.fromarray(image)
+        image = Image.fromarray(image) # transforming the image to PIL
         mask = Image.fromarray(mask)
 
         if self.image_transform: # if there is some preprocessing on the data
             image = self.image_transform(image) # apply the transformations on both the image and corresponding mask
+        mask = mask.convert("L") # we ensure that mask have only one channel (grayscale)
         if self.mask_transform:
             mask = self.mask_transform(mask)
+
+        mask = (mask > 0.5).float() # ensure mask is binary
 
         return image, mask
 
