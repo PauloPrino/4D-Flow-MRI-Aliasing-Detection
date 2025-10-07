@@ -9,7 +9,7 @@ import os
 from PIL import Image
 import numpy as np
 
-num_epochs = 50
+num_epochs = 2
 
 def dice_loss(model_output, masks, smooth=1.0): # model_output : the predicted mask by the model (an image of 0 and 1, non aliased and aliased pixels)
     probs = torch.sigmoid(model_output)
@@ -47,49 +47,22 @@ model = UNET.UNET(in_channels=3, out_channels=1, init_features=32).to(device) # 
 criterion = combined_loss
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-data_preprocessing = transforms.Compose([
-    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), # normalizing
-    # we can add here data augmentation on the training set
-])
-
-validation_transform = transforms.Compose([
-    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]) # normalizing
-])
-
-test_transform = transforms.Compose([
-    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]) # normalizing
-])
-
-mask_transform = transforms.Compose([
-    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
-    transforms.ToTensor()
-])
-
 train_dataset = MRIDataset.MRIDataset(
     image_dir="swimseg-2/train",
     mask_dir="swimseg-2/train_labels",
-    image_transform=data_preprocessing,
-    mask_transform=mask_transform
+    data_augmentation=True
 )
 
 val_dataset = MRIDataset.MRIDataset(
     image_dir="swimseg-2/val",
     mask_dir="swimseg-2/val_labels",
-    image_transform=validation_transform, # validation transform so no data augmentation
-    mask_transform=mask_transform
+    data_augmentation=False, # validation transform so no data augmentation
 )
 
 test_dataset = MRIDataset.MRIDataset(
     image_dir="swimseg-2/test",
     mask_dir="swimseg-2/test_labels",
-    image_transform=test_transform, # test transform so no data augmentation
-    mask_transform=mask_transform
+    data_augmentation=False # test transform so no data augmentation
 )
 
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True)
@@ -234,7 +207,13 @@ if mask_np.dtype == np.float32 or mask_np.dtype == np.float64:
 
 image = Image.fromarray(image_np) # converting from numpy to PIL
 
-input_tensor = data_preprocessing(image).unsqueeze(0).to(device)
+trans = transforms.Compose([
+        transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), # normalizing
+    ])
+
+input_tensor = trans(image).unsqueeze(0).to(device)
 
 predicted_mask = torch.sigmoid(model(input_tensor))
 predicted_mask_binary = (predicted_mask > 0.5).float() # predicted binary mask so only 0 and 1 values
