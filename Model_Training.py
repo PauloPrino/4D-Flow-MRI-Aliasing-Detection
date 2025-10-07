@@ -79,7 +79,10 @@ test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=Fa
 for epoch in range(num_epochs):
     print(f"Starting epoch {epoch + 1}/{num_epochs}")
     model.train()
+    i = 0
     for images, masks in train_loader: # do batch by batch the training
+        i+=1
+        print(f"Batch: {i}/{len(train_loader)}")
         images, masks = images.to(device), masks.to(device)
         outputs = model(images)
         loss = criterion(outputs, masks) # loss which measures the ratio of overlapping correct predicted pixels
@@ -113,6 +116,8 @@ with torch.no_grad():
     test_loss = test_loss / len(test_loader)
 print(f"Test Loss: {test_loss:.4f}")
 
+torch.save(model.state_dict(), "unet_model.pth")
+
 def plot_results(image, mask, pred_mask):
     plt.figure(figsize=(12, 4))
     plt.subplot(131)
@@ -125,3 +130,8 @@ def plot_results(image, mask, pred_mask):
     plt.imshow(pred_mask.squeeze(), cmap='gray')
     plt.title("Predicted mask")
     plt.show()
+
+model.load_state_dict(torch.load("unet_model.pth", weights_only=True))
+model.eval()
+predicted_mask = model("swimseg-2/test/0913.png".to(device))
+plot_results("swimseg-2/test/0913.png", "swimseg-2/test_labels/0913.png", predicted_mask.cpu())

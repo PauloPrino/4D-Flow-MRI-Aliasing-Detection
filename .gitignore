@@ -1,3 +1,4 @@
 /swimseg-2
 *.pycache
 *__pycache__
+*.pth
