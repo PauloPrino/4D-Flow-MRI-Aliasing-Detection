@@ -9,7 +9,7 @@ import os
 from PIL import Image
 import numpy as np
 
-num_epochs = 2
+num_epochs = 100
 
 def dice_loss(model_output, masks, smooth=1.0): # model_output : the predicted mask by the model (an image of 0 and 1, non aliased and aliased pixels)
     probs = torch.sigmoid(model_output)
