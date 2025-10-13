@@ -1,7 +1,5 @@
 import nibabel as nib
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import numpy as np
 
 def visualize_nifti_slices(nii_gz_path, time_frame, position_x, position_y, position_z):
     """
@@ -36,7 +34,7 @@ def visualize_nifti_slices(nii_gz_path, time_frame, position_x, position_y, posi
     axes[1].set_title(f"Coronal Slice at position y={position_y}") # the pixels on the image are velocities in the direction of x
 
     sagital_view = axes[2].imshow(slice_z.T, cmap="gray", origin="lower")
-    axes[2].set_title(f"Sagital Slice at position x={position_x}") # the pixels on the image are velocities in the direction of y
+    axes[2].set_title(f"Sagittal Slice at position x={position_x}") # the pixels on the image are velocities in the direction of y
 
     fig.colorbar(axial_view, ax=axes[0], label="Pixel value")
     fig.colorbar(coronal_view, ax=axes[1], label="Pixel value")
@@ -45,5 +43,5 @@ def visualize_nifti_slices(nii_gz_path, time_frame, position_x, position_y, posi
     plt.show()
 
 nii_path = "Dataset/IRM_BAO_069_1_4D_NIfTI/IRM_BAO_069_1_4D_NIfTI_e3.nii.gz"
-#visualize_nifti_slices(nii_path, time_frame=5, position_x=64, position_y=64, position_z=32)
+visualize_nifti_slices(nii_path, time_frame=5, position_x=64, position_y=64, position_z=32)
 #visualize_nifti_slices(nii_path, time_frame=40, position_x=64, position_y=64, position_z=32)
