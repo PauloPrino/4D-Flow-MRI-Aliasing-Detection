@@ -3,9 +3,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import GetMetadataDICOM
 
+MAX_PIXEL_VALUE = 32768 # encoded in int16
+
 class StudyCaseNIfTI():
     def __init__(self, study_path):
-        """study_path: path to the folder of the study"""
+        """
+        study_path: path to the folder of the study
+        """
         self.study_path = study_path
         self.nifti_magnitude_path = study_path + "/" + study_path.split("/")[1] + ".nii.gz" # the file path of the magnitude (so the anatomy)
         self.nifti_LR_flow_path = study_path + "/" + study_path.split("/")[1] + "_e2.nii.gz" # the file path of the LR (Left-Right so axis x) of the blood flow
@@ -21,6 +25,12 @@ class StudyCaseNIfTI():
         self.data_SI_flow = self.nifti_SI_flow.get_fdata()
     
     def correspondance_nifti_file_path_protocol(self, protocol):
+        """
+        INPUT:
+            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
+
+        OUTPUT: the path of the .nii.gz file corresponding to the chosen protocol
+        """
         if protocol == "magnitude":
             return self.nifti_magnitude_path
         if protocol == "LR":
@@ -31,6 +41,12 @@ class StudyCaseNIfTI():
             return self.nifti_SI_flow_path
 
     def correspondance_nifti_file_protocol(self, protocol):
+        """
+        INPUT:
+            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
+
+        OUTPUT: the loaded .nii.gz file corresponding to the chosen protocol
+        """
         if protocol == "magnitude":
             return self.nifti_magnitude
         if protocol == "LR":
@@ -41,6 +57,12 @@ class StudyCaseNIfTI():
             return self.nifti_SI_flow
         
     def correspondance_nifti_data_protocol(self, protocol):
+        """
+        INPUT:
+            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
+
+        OUTPUT: the data (stored in numpy format) of the file corresponding to the chosen protocol
+        """
         if protocol == "magnitude":
             return self.data_magnitude
         if protocol == "LR":
@@ -51,18 +73,31 @@ class StudyCaseNIfTI():
             return self.data_SI_flow
 
     def get_venc(self, protocol):
-        study_case_path = self.study_path.remove("_NIfTI")
+        """
+        INPUT:
+            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
+
+        OUTPUT: 
+            - venc: the velocity encoding of the protocol chosen
+        """
+        study_case_path = self.study_path.replace("_NIfTI","")
         dicom_study_case = GetMetadataDICOM.StudyCaseDICOM(study_case_path)
         venc = dicom_study_case.get_venc(protocol)
-        print(f"Velocity encoding (VENC) = {venc}mm/s")
         return venc
     
-    def get_velocity_encoding_scale(self, protocol):
-        study_case_path = self.study_path.remove("_NIfTI")
+    def get_venc_scale(self, protocol):
+        """
+        INPUT:
+            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
+        
+        OUTPUT:
+            - venc_scale: the velocity encoding scale
+        """
+        study_case_path = self.study_path.replace("_NIfTI","")
         dicom_study_case = GetMetadataDICOM.StudyCaseDICOM(study_case_path)
-        velocity_encoding_scale = dicom_study_case.get_velocity_encode_scale(protocol)
-        print(f"Velocity encoding scale = {velocity_encoding_scale}s/mm")
-        return velocity_encoding_scale
+        venc_scale = dicom_study_case.get_velocity_encode_scale(protocol)
+        print(f"Velocity encoding scale = {venc_scale}s/mm")
+        return venc_scale
 
     def get_header(self, protocol):
         nifti_file = self.correspondance_nifti_file_protocol(protocol)
@@ -126,14 +161,16 @@ class StudyCaseNIfTI():
         coronal_view = axes[1].imshow(np.rot90(np.rot90(np.rot90(coronal_slice.T))), cmap="gray", origin="lower")
         axes[1].set_title(f"Coronal Slice for protocol {protocol} at position x={coronal_slice_index}") # the pixels on the image are velocities in the perpendicular direction: x
 
-        sagital_view = axes[2].imshow(sagittal_slice.T, cmap="gray", origin="lower")
+        sagittal_view = axes[2].imshow(sagittal_slice.T, cmap="gray", origin="lower")
         axes[2].set_title(f"Sagittal Slice for protocol {protocol} at position z={sagittal_slice_index}") # the pixels on the image are velocities in the perpendicular direction: z
 
-        fig.colorbar(axial_view, ax=axes[0], label="Pixel value")
-        fig.colorbar(coronal_view, ax=axes[1], label="Pixel value")
-        fig.colorbar(sagital_view, ax=axes[2], label="Pixel value")
+        fig.colorbar(axial_view, ax=axes[0], label="Phase value")
+        fig.colorbar(coronal_view, ax=axes[1], label="Phase value")
+        fig.colorbar(sagittal_view, ax=axes[2], label="Phase value")
         plt.tight_layout()
         plt.show()
+
+        return axial_view, coronal_view, sagittal_view
 
     def visualize_slice(self, section, slice_index, time_frame, protocol):
         slice = self.get_slice(section, slice_index, time_frame, protocol)
@@ -147,10 +184,27 @@ class StudyCaseNIfTI():
             view = axes.imshow(slice.T, cmap="gray", origin="lower")
         axes.set_title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
 
-        fig.colorbar(view, ax=axes, label="Pixel value")
+        fig.colorbar(view, ax=axes, label="Phase value")
 
         plt.tight_layout()
         plt.show()
+
+    def conversion_pixel_phase_to_velocity(self, venc, pixel_phase_value):
+        velocity = (pixel_phase_value / MAX_PIXEL_VALUE) * venc
+        return velocity
+
+    def conversion_phase_to_velocity(self, protocol):
+        venc = self.get_venc(protocol)
+        print(f"Converting the phase pixel values into velocities using velocity encoding (VENC) {venc}cm/s")
+        protocol_data = self.correspondance_nifti_data_protocol(protocol)
+        velocities = np.zeros_like(protocol_data)
+        for i in range(protocol_data.shape[0]):
+            for j in range(protocol_data.shape[1]):
+                for k in range(protocol_data.shape[2]):
+                    pixel_phase_value = protocol_data[i,j,k]
+                    pixel_velocity_value = self.conversion_pixel_phase_to_velocity(venc, pixel_phase_value)
+                    velocities[i,j,k] = pixel_velocity_value
+        return velocities
 
     def visualize_velocity_vectors(self, section, slice_index, time_frame, scale=2, stride=4):
         """
@@ -162,9 +216,9 @@ class StudyCaseNIfTI():
         stride: skip pixels to avoid overcrowding, not draw an arrow on each pixel
         """
         mag = self.data_magnitude
-        vx = self.data_LR_flow # velocity in nifty (so the (y, x, z) coordinates)
-        vy = self.data_AP_flow
-        vz = self.data_SI_flow
+        vx = self.conversion_phase_to_velocity("LR") # velocity in nifti (so the (y, x, z) coordinates)
+        vy = self.conversion_phase_to_velocity("AP")
+        vz = self.conversion_phase_to_velocity("SI")
 
         if section == "axial":
             img = mag[:, slice_index, :, time_frame]
@@ -188,6 +242,8 @@ class StudyCaseNIfTI():
         u = u[::stride, ::stride]
         v = v[::stride, ::stride]
 
+        vector_norm = np.sqrt(u**2 + v**2) # norm of the velocity
+
         # Generate coordinates for the arrows, also downsampled
         Y, X = np.mgrid[0:img.shape[0]:stride, 0:img.shape[1]:stride]
 
@@ -195,11 +251,15 @@ class StudyCaseNIfTI():
         axes[0].imshow(img, cmap='gray', origin='lower')
         u_view = axes[1].imshow(u, cmap="gray", origin="lower")
         v_view = axes[2].imshow(v, cmap="gray", origin="lower")
-        fig.colorbar(u_view, ax=axes[1], label="Pixel value")
-        fig.colorbar(v_view, ax=axes[2], label="Pixel value")
-        axes[0].quiver( # overlay arrows on top of the image
+        fig.colorbar(u_view, ax=axes[1], label="Phase value")
+        fig.colorbar(v_view, ax=axes[2], label="Phase value")
+        norm = plt.Normalize(vmin=np.min(vector_norm), vmax=np.max(vector_norm))
+        cmap = plt.colormaps['plasma']
+        vector_view = axes[0].quiver( # overlay arrows on top of the image
             X, Y, u, v,
-            color='red',
+            vector_norm,
+            cmap=cmap,
+            norm=norm,
             scale=scale,
             width=0.002,
             angles='xy',
@@ -208,19 +268,110 @@ class StudyCaseNIfTI():
             headlength=4, # length of the head of the arrow
             headaxislength=3 # length of the body of the arrow
         )
+        fig.colorbar(vector_view, ax=axes[0], label="Velocity norm (cm/s)")
         axes[0].set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={time_frame})")
         axes[0].set_xlabel(xlabel)
         axes[0].set_ylabel(ylabel)
         plt.tight_layout()
         plt.show()
 
+    def visualize_aliasing_simulation(self, axial_slice_index, coronal_slice_index, sagittal_slice_index, time_frame, protocol, aliased_pixels, phase_data_after_aliasing):
+        """
+        Visualize slices before and after aliasing simulation.
+        """
+        print(f"Starting to plot the aliased simulation...")
+        sagittal_slice_non_aliased = self.get_slice("sagittal", sagittal_slice_index, time_frame, protocol)
+        coronal_slice_non_aliased = self.get_slice("coronal", coronal_slice_index, time_frame, protocol)
+        axial_slice_non_aliased = self.get_slice("axial", axial_slice_index, time_frame, protocol)
+
+        sagittal_slice_aliased = phase_data_after_aliasing[:, :, sagittal_slice_index]
+        coronal_slice_aliased = phase_data_after_aliasing[sagittal_slice_index, :, :]
+        axial_slice_aliased = phase_data_after_aliasing[:, axial_slice_index, :]
+
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12)) # 2 lines (one for non-aliased and one for aliased) and 3 columns (for the 3 different sections)
+
+        # Line 1: non aliased
+        axial_non_aliased_view = axes[0, 0].imshow(np.rot90(np.rot90(axial_slice_non_aliased)), cmap="gray", origin="lower")
+        axes[0, 0].set_title(f"Axial Slice (Non-Aliased) at y={axial_slice_index}")
+
+        coronal_non_aliased_view = axes[0, 1].imshow(np.rot90(np.rot90(np.rot90(coronal_slice_non_aliased.T))), cmap="gray", origin="lower")
+        axes[0, 1].set_title(f"Coronal Slice (Non-Aliased) at x={coronal_slice_index}")
+
+        sagittal_non_aliased_view = axes[0, 2].imshow(sagittal_slice_non_aliased.T, cmap="gray", origin="lower")
+        axes[0, 2].set_title(f"Sagittal Slice (Non-Aliased) at z={sagittal_slice_index}")
+
+        # Line 2: aliased
+        axial_aliased_view = axes[1, 0].imshow(np.rot90(np.rot90(axial_slice_aliased)), cmap="gray", origin="lower")
+        axes[1, 0].set_title(f"Axial Slice (Aliased) at y={axial_slice_index}")
+
+        coronal_aliased_view = axes[1, 1].imshow(np.rot90(np.rot90(np.rot90(coronal_slice_aliased.T))), cmap="gray", origin="lower")
+        axes[1, 1].set_title(f"Coronal Slice (Aliased) at x={coronal_slice_index}")
+
+        sagittal_aliased_view = axes[1, 2].imshow(sagittal_slice_aliased.T, cmap="gray", origin="lower")
+        axes[1, 2].set_title(f"Sagittal Slice (Aliased) at z={sagittal_slice_index}")
+
+        fig.colorbar(axial_non_aliased_view, ax=axes[0,0], label="Phase value")
+        fig.colorbar(coronal_non_aliased_view, ax=axes[0,1], label="Phase value")
+        fig.colorbar(sagittal_non_aliased_view, ax=axes[0,2], label="Phase value")
+        fig.colorbar(axial_aliased_view, ax=axes[1,0], label="Phase value")
+        fig.colorbar(coronal_aliased_view, ax=axes[1,1], label="Phase value")
+        fig.colorbar(sagittal_aliased_view, ax=axes[1,2], label="Phase value")
+
+        # Add red dots on the aliased voxels (takes time because it goes back through all of the pixels of the three images)
+        """
+        if aliased_pixels is not None:
+            for pixel in aliased_pixels:
+                x, y, z = pixel
+                if y == axial_slice_index:
+                    axes[1, 0].scatter(x, z, color='red', s=1)
+                if x == coronal_slice_index:
+                    axes[1, 1].scatter(y, z, color='red', s=1)
+                if z == sagittal_slice_index:
+                    axes[1, 2].scatter(x, y, color='red', s=1)
+        """
+        plt.tight_layout()
+        plt.show()
+
+    def simulate_aliasing(self, protocol, venc, time_frame):
+        """
+        Simultes the aliasing effect by virtually decreasing the VENC lower than the one of the acquisition to end up with velocities above +venc and under -venc to have aliased voxels
+        protocol: the protocol on which the aliasing effect is simulated ("LR", "AP" or "SI")
+        venc: the new velocity encoding (venc) value used, this value must be under the venc of the acquisition to end up with simulated aliased voxels
+        time_frame: the time frame on which we want to apply the simulation
+        """
+        phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)[:,:,:,time_frame]
+        phase_data_after_aliasing = np.zeros_like(phase_data_before_aliasing)
+        velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)[:,:,:,time_frame]
+        data_post_aliasing = np.zeros_like(velocity_before_aliasing)
+        acquisition_venc = self.get_venc(protocol)
+
+        aliased_pixels = []
+
+        print(f"Simulating the aliasing effect on the protocol {protocol} with VENC={venc} instead of original VENC (acquisition VENC)={acquisition_venc}")
+        for x in range(velocity_before_aliasing.shape[0]):
+            for y in range(velocity_before_aliasing.shape[1]):
+                for z in range(velocity_before_aliasing.shape[2]):
+                    pixel_velocity = velocity_before_aliasing[x,y,z]
+                    while pixel_velocity > venc: 
+                        data_post_aliasing[x,y,z] = pixel_velocity - 2*venc
+                        aliased_pixels.append([x,y,z])
+                    while pixel_velocity < -venc:
+                        data_post_aliasing[x,y,z] = pixel_velocity + 2*venc
+                        aliased_pixels.append([x,y,z])
+                    if pixel_velocity <= venc and pixel_velocity >= -venc:
+                        data_post_aliasing[x,y,z] = pixel_velocity
+                    phase_data_after_aliasing[x,y,z] = MAX_PIXEL_VALUE * data_post_aliasing[x,y,z] / venc # max_pixel_value * new_velocity_value / venc
+        print(f"Number of aliased voxels: {len(aliased_pixels)}")
+        return data_post_aliasing, phase_data_after_aliasing, aliased_pixels
 
 nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
-nifti_file.get_header("LR")
-nifti_file.get_image_shape_by_section("coronal","LR")
-nifti_file.get_number_of_slices_by_section("coronal","LR")
-nifti_file.get_number_of_time_frames("LR")
-nifti_file.visualize_slices(94, 189, 68,0,"LR")
-nifti_file.visualize_slice("coronal", 189, 0,"LR")
-nifti_file.get_venc("LR")
-nifti_file.visualize_velocity_vectors("sagittal", 73, 0, scale=50, stride=2)
+#nifti_file.get_header("LR")
+#nifti_file.get_image_shape_by_section("coronal","LR")
+#nifti_file.get_number_of_slices_by_section("coronal","LR")
+#nifti_file.get_number_of_time_frames("LR")
+#nifti_file.visualize_slices(94, 189, 68,0,"LR")
+#nifti_file.visualize_slice("coronal", 189, 0,"LR")
+#nifti_file.get_venc("LR")
+#nifti_file.visualize_velocity_vectors("sagittal", 73, 0, scale=1, stride=4)
+data_post_aliasing, phase_data_after_aliasing, aliased_pixels = nifti_file.simulate_aliasing("LR", 1600, 0)
+nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, "LR", aliased_pixels, phase_data_after_aliasing)

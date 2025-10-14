@@ -31,26 +31,24 @@ class StudyCaseDICOM():
         file_path = self.study_path + "/" + protocol_folder + "/" + "img" + file_index + "--85.6149.dcm"
         hdr = pydicom.dcmread(file_path) # loading the DICOM file
 
-        for elem in hdr: # listing all tags of the document
-            print(elem) # Tag name, value representation, value length, and value
         return hdr
 
     def get_venc(self, protocol):
         venc_tag = (0x0019, 0x10CC) # Tag of the VENC value (where we go get it, found after looking through the entire tag list)
         hdr = self.get_header(protocol, 1)
         if venc_tag in hdr:
-            venc = hdr[venc_tag].value # value of the venc in mm/s
-            print(f"VENC found (tag {venc_tag}): {hdr[venc_tag].value} mm/s so {hdr[venc_tag].value/10} cm/s")
+            venc = hdr[venc_tag].value # value of the venc in cm/s
+            print(f"VENC found (tag {venc_tag}): {hdr[venc_tag].value} cm/s")
         return venc
 
     def get_velocity_encode_scale(self, protocol):
-        velocity_encode_scale_tag = (0x0019, 0x10E2) # Tag of the Velocity Encoding Scale (not used here, but could be useful)
-        # So we can now compute the velocity by going from phase value to velocity value : velocity = voxel_value / velocity_encode_scale
+        venc_scale_tag = (0x0019, 0x10E2) # Tag of the Velocity Encoding Scale (not used here, but could be useful)
+        # So we can now compute the velocity by going from phase value to velocity value : velocity = voxel_value * venc_scale
 
         hdr = self.get_header(protocol, 1)
-        if velocity_encode_scale_tag in hdr:
-            velocity_encode_scale = hdr[velocity_encode_scale_tag].value
-            print(f"Velocity Encoding Scale found (tag {velocity_encode_scale_tag}): {hdr[velocity_encode_scale_tag].value}s/mm")
-        return velocity_encode_scale
+        if venc_scale_tag in hdr:
+            venc_scale = hdr[venc_scale_tag].value
+            print(f"Velocity Encoding Scale found (tag {venc_scale_tag}): {hdr[venc_scale_tag].value}cm/s/rad") # venc_scale = venc / pi
+        return venc_scale
     
 study_case_dicom = StudyCaseDICOM("Dataset/IRM_BAO_069_1_4D")
