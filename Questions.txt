@@ -1,0 +1,3 @@
+- entrainer sur phase ou vélocitées déterminés des phases
+
+- entrainement étudier les différents cas : 2D, 3D, 4D, donner même d'autres infos contextuelles : venc

@@ -38,7 +38,7 @@ class StudyCaseDICOM():
         hdr = self.get_header(protocol, 1)
         if venc_tag in hdr:
             venc = hdr[venc_tag].value # value of the venc in cm/s
-            print(f"VENC found (tag {venc_tag}): {hdr[venc_tag].value} cm/s")
+            #print(f"VENC found (tag {venc_tag}): {hdr[venc_tag].value} cm/s")
         return venc
 
     def get_velocity_encode_scale(self, protocol):
