@@ -2,6 +2,8 @@ import nibabel as nib
 import matplotlib.pyplot as plt
 import numpy as np
 import GetMetadataDICOM
+import time
+from matplotlib.animation import FuncAnimation, PillowWriter
 
 MAX_PIXEL_VALUE = 32768 # encoded in int16
 
@@ -221,7 +223,7 @@ class StudyCaseNIfTI():
         """
         venc = self.get_venc(protocol)
         protocol_data = self.correspondance_nifti_data_protocol(protocol)
-        print(f"Converting phase pixel values into velocities using VENC={venc}cm/s")
+        print(f"Converting phase pixel values into velocities for protocol {protocol} using VENC={venc}cm/s")
         velocities = (protocol_data / MAX_PIXEL_VALUE) * venc
         return velocities
 
@@ -240,42 +242,39 @@ class StudyCaseNIfTI():
         vz = self.conversion_phase_to_velocity("SI")
 
         if section == "axial":
-            img = mag[:, slice_index, :, time_frame]
-            u = vx[:, slice_index, :, time_frame]
-            v = vy[:, slice_index, :, time_frame]
+            magnitude_data = mag[:, slice_index, :, :]
+            u_data = vx[:, slice_index, :, :]
+            v_data = vy[:, slice_index, :, :]
             xlabel, ylabel = "Left-Right", "Anterior-Posterior"
 
         elif section == "coronal":
-            img = mag[slice_index, :, :, time_frame]
-            u = vx[slice_index, :, :, time_frame]
-            v = vz[slice_index, :, :, time_frame]
+            magnitude_data = mag[slice_index, :, :, :]
+            u_data = vx[slice_index, :, :, :]
+            v_data = vz[slice_index, :, :, :]
             xlabel, ylabel = "Left-Right", "Superior-Inferior"
 
         elif section == "sagittal":
-            img = mag[:, :, slice_index, time_frame]
-            u = vy[:, :, slice_index, time_frame]
-            v = vz[:, :, slice_index, time_frame]
+            magnitude_data = mag[:, :, slice_index, :]
+            u_data = vy[:, :, slice_index, :]
+            v_data = vz[:, :, slice_index, :]
             xlabel, ylabel = "Anterior-Posterior", "Superior-Inferior"
 
         # Downsample to avoid too many arrows (we do some striding similar as we do on )
-        u = u[::stride, ::stride]
-        v = v[::stride, ::stride]
+        u = u_data[::stride, ::stride, 0]
+        v = v_data[::stride, ::stride, 0]
 
         vector_norm = np.sqrt(u**2 + v**2) # norm of the velocity
 
         # Generate coordinates for the arrows, also downsampled
-        Y, X = np.mgrid[0:img.shape[0]:stride, 0:img.shape[1]:stride]
+        Y, X = np.mgrid[0:magnitude_data.shape[0]:stride, 0:magnitude_data.shape[1]:stride]
 
-        fig, axes = plt.subplots(1, 3, figsize=(12,4))
-        axes[0].imshow(img, cmap='gray', origin='lower')
-        u_view = axes[1].imshow(u, cmap="gray", origin="lower")
-        v_view = axes[2].imshow(v, cmap="gray", origin="lower")
-        fig.colorbar(u_view, ax=axes[1], label="Phase value")
-        fig.colorbar(v_view, ax=axes[2], label="Phase value")
+        fig, ax = plt.subplots(1, 1, figsize=(12,4))
+        anatomical_view = ax.imshow(magnitude_data[..., 0].T, cmap='gray', origin='lower')
+
         norm = plt.Normalize(vmin=np.min(vector_norm), vmax=np.max(vector_norm))
         cmap = plt.colormaps['plasma']
-        vector_view = axes[0].quiver( # overlay arrows on top of the image
-            X, Y, u, v,
+        quiv = ax.quiver( # overlay arrows on top of the image
+            Y, X, v, u,
             vector_norm,
             cmap=cmap,
             norm=norm,
@@ -287,10 +286,24 @@ class StudyCaseNIfTI():
             headlength=4, # length of the head of the arrow
             headaxislength=3 # length of the body of the arrow
         )
-        fig.colorbar(vector_view, ax=axes[0], label="Velocity norm (cm/s)")
-        axes[0].set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={time_frame})")
-        axes[0].set_xlabel(xlabel)
-        axes[0].set_ylabel(ylabel)
+        cbar = fig.colorbar(quiv, ax=ax, label="Velocity norm (cm/s)")
+        ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={time_frame})")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+
+        def update(frame):
+            u = u_data[::stride, ::stride, frame]
+            v = v_data[::stride, ::stride, frame]
+            mag_frame = magnitude_data[..., frame]
+
+            vector_norm = np.sqrt(u**2 + v**2)
+            quiv.set_UVC(v, u, vector_norm)
+            anatomical_view.set_data(mag_frame.T)
+            ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={frame})")
+            return quiv, anatomical_view
+
+        anim = FuncAnimation(fig, update, frames=50, interval=100, blit=False)
+        anim.save(f"velocity_{section}_slice_{slice_index}.gif", writer=PillowWriter(fps=100))
         plt.tight_layout()
         plt.show()
 
@@ -339,9 +352,7 @@ class StudyCaseNIfTI():
         # Add red dots we more or less intensity depending on the number of phase wraps of the pixel
         max_wraps = np.max(aliased_pixels)
         if max_wraps > 0:
-            print(aliased_pixels.shape)
             aliased_pixels_axial_slice = np.rot90(np.rot90(aliased_pixels[:, axial_slice_index, :].T))
-            print(aliased_pixels_axial_slice.shape)
             aliased_pixels_sagittal_slice = aliased_pixels[:, :, sagittal_slice_index]
             aliased_pixels_coronal_slice = np.rot90(np.rot90(np.rot90(aliased_pixels[coronal_slice_index, :, :])))
             for x in range(aliased_pixels_axial_slice.shape[0]):
@@ -413,5 +424,5 @@ nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_venc("LR")
 nifti_file.visualize_velocity_vectors("sagittal", 73, 0, scale=1, stride=4)
 #nifti_file.visualize_velocity_slice("sagittal", 73, 0, "LR")
-velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels = nifti_file.simulate_aliasing("LR", 10, 0)
-nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, "LR", aliased_pixels, velocity_post_aliasing, 10)
+#velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels = nifti_file.simulate_aliasing("LR", 50, 0)
+#nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, "LR", aliased_pixels, velocity_post_aliasing, 50)

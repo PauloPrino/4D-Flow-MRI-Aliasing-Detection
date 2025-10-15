@@ -1,3 +1,6 @@
 - entrainer sur phase ou vélocitées déterminés des phases
 
 - entrainement étudier les différents cas : 2D, 3D, 4D, donner même d'autres infos contextuelles : venc
+
+- comment eux ils enlèvent le problème du zéro pcq sinon ca peut tout à fait être un sujet que je traite en même temps pcq la le pb du zéro ca gâche tout
+	ce que je peux facilement essayer c que je prend deux trois time frames aléatoirement et je regarde si les valeurs de vélocités sont les mêmes, si se sont les mêmes alors on a un pb, c que certainement ce pixel est censé avoir une vélocité à 0
