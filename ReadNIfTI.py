@@ -186,11 +186,11 @@ class StudyCaseNIfTI():
         return axial_view, coronal_view, sagittal_view
 
     def visualize_anatomy(self, section, slice_index):
-        slice = self.data_magnitude[:, :, slice_index, 0]
+        slice = self.data_magnitude[slice_index, :, :, 0]
 
         fig, axes = plt.subplots(1, 1, figsize=(12, 4))
 
-        view = axes.imshow(slice, cmap="gray", origin="lower")
+        view = axes.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
         
         axes.set_title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
 
@@ -280,21 +280,22 @@ class StudyCaseNIfTI():
             xlabel, ylabel = "Anterior-Posterior", "Superior-Inferior"
 
         # Downsample to avoid too many arrows (we do some striding similar as we do on )
-        u = u_data[::stride, ::stride, time_frame]
-        v = v_data[::stride, ::stride, time_frame]
+        u = self.transform_rotate_slice(u_data[::stride, ::stride, time_frame], section)
+        v = self.transform_rotate_slice(v_data[::stride, ::stride, time_frame], section)
+        mag = self.transform_rotate_slice(magnitude_data[:, :, time_frame], section)
 
         vector_norm = np.sqrt(u**2 + v**2) # norm of the velocity
 
         # Generate coordinates for the arrows, also downsampled
-        Y, X = np.mgrid[0:magnitude_data.shape[0]:stride, 0:magnitude_data.shape[1]:stride]
+        Y, X = np.mgrid[0:mag.shape[0]:stride, 0:mag.shape[1]:stride]
 
         fig, ax = plt.subplots(1, 1, figsize=(12,4))
-        anatomical_view = ax.imshow(self.transform_rotate_slice(magnitude_data[:, :, time_frame], section), cmap='gray', origin='lower')
+        anatomical_view = ax.imshow(mag, cmap='gray', origin='lower')
 
         norm = plt.Normalize(vmin=np.min(vector_norm), vmax=np.max(vector_norm))
         cmap = plt.colormaps['plasma']
         quiv = ax.quiver( # overlay arrows on top of the image
-            Y, X, v, u,
+            X, Y, u, -v,
             vector_norm,
             cmap=cmap,
             norm=norm,
@@ -312,13 +313,13 @@ class StudyCaseNIfTI():
         ax.set_ylabel(ylabel)
 
         def update(frame):
-            u = u_data[::stride, ::stride, frame]
-            v = v_data[::stride, ::stride, frame]
-            mag_frame = magnitude_data[:, :, frame]
+            u = self.transform_rotate_slice(u_data[::stride, ::stride, frame], section)
+            v = self.transform_rotate_slice(v_data[::stride, ::stride, frame], section)
+            mag_frame = self.transform_rotate_slice(magnitude_data[:, :, frame], section)
 
             vector_norm = np.sqrt(u**2 + v**2)
-            quiv.set_UVC(v, u, vector_norm) # updates the quiver plot (the vector fields) to be the one of the current time frame
-            anatomical_view.set_data(self.transform_rotate_slice(mag_frame, section)) # update the data of the magnitude to be the one of the current time frame
+            quiv.set_UVC(u, -v, vector_norm) # updates the quiver plot (the vector fields) to be the one of the current time frame
+            anatomical_view.set_data(mag_frame) # update the data of the magnitude to be the one of the current time frame
             ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={frame})")
             return quiv, anatomical_view
 
@@ -327,6 +328,7 @@ class StudyCaseNIfTI():
             anim.save(f"velocity_{section}_slice_{slice_index}.gif", writer=PillowWriter(fps=interval))
         plt.tight_layout()
         plt.show()
+
 
     def visualize_aliasing_simulation(self, axial_slice_index, coronal_slice_index, sagittal_slice_index, time_frame, protocol, aliased_pixels, velocity_post_aliasing, new_venc):
         """
@@ -443,8 +445,8 @@ nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.visualize_slices(94, 189, 68,0,"LR")
 #nifti_file.visualize_slice("coronal", 189, 0,"LR")
 #nifti_file.get_venc("LR")
-#nifti_file.visualize_velocity_vectors("sagittal", 73, 100, scale=1, stride=4, time_frame=10)
+nifti_file.visualize_velocity_vectors("coronal", 160, 100, scale=2, stride=4, time_frame=0)
 #nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
 #velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels = nifti_file.simulate_aliasing("LR", 50, 0)
 #nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, "LR", aliased_pixels, velocity_post_aliasing, 50)
-nifti_file.visualize_anatomy("sagittal", 127)
+#nifti_file.visualize_anatomy("coronal", 166)
