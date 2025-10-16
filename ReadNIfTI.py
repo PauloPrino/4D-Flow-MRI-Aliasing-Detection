@@ -185,6 +185,20 @@ class StudyCaseNIfTI():
 
         return axial_view, coronal_view, sagittal_view
 
+    def visualize_anatomy(self, section, slice_index):
+        slice = self.data_magnitude[:, :, slice_index, 0]
+
+        fig, axes = plt.subplots(1, 1, figsize=(12, 4))
+
+        view = axes.imshow(slice, cmap="gray", origin="lower")
+        
+        axes.set_title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
+
+        fig.colorbar(view, ax=axes, label="Phase value")
+
+        plt.tight_layout()
+        plt.show()
+
     def visualize_slice(self, section, slice_index, time_frame, protocol):
         """
         Visualize a slice with the phase values
@@ -192,18 +206,23 @@ class StudyCaseNIfTI():
         slice = self.get_slice(section, slice_index, time_frame, protocol)
 
         fig, axes = plt.subplots(1, 1, figsize=(12, 4))
-        if section == "axial":
-            view = axes.imshow(np.rot90(np.rot90(slice)), cmap="gray", origin="lower")
-        elif section == "coronal":
-            view = axes.imshow(np.rot90(np.rot90(np.rot90(slice.T))), cmap="gray", origin="lower")
-        elif section == "sagittal":
-            view = axes.imshow(slice.T, cmap="gray", origin="lower")
+
+        view = axes.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
+        
         axes.set_title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
 
         fig.colorbar(view, ax=axes, label="Phase value")
 
         plt.tight_layout()
         plt.show()
+
+    def transform_rotate_slice(self, slice, section_name):
+        if section_name == "axial":
+            return np.rot90(np.rot90(slice))
+        if section_name == "coronal":
+            return np.rot90(np.rot90(np.rot90(slice.T)))
+        if section_name == "sagittal":
+            return slice.T
 
     def visualize_velocity_slice(self, section, slice_index, time_frame, protocol):
         """
@@ -212,7 +231,7 @@ class StudyCaseNIfTI():
         slice_velocity = self.get_slice_velocity(time_frame, section, protocol, slice_index)      
 
         fig, ax = plt.subplots(figsize=(6, 6))
-        im = ax.imshow(slice_velocity.T, cmap="seismic", origin="lower")
+        im = ax.imshow(self.transform_rotate_slice(slice_velocity, section), cmap="seismic", origin="lower")
         ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity (cm/s)")
         cbar = fig.colorbar(im, ax=ax, label="Velocity (cm/s)")
         plt.show()
@@ -227,17 +246,18 @@ class StudyCaseNIfTI():
         velocities = (protocol_data / MAX_PIXEL_VALUE) * venc
         return velocities
 
-    def visualize_velocity_vectors(self, section, slice_index, time_frame, scale=2, stride=4):
+    def visualize_velocity_vectors(self, section, slice_index, interval, scale=2, stride=4, time_frame=0):
         """
         Visualize a slice with velocity vectors (arrows) overlaid on top of the magnitude (anatomy)
         section: 'axial', 'coronal', or 'sagittal'
         slice_index: index of the slice in that section
-        time_frame: temporal frame index
+        interval: time in ms between the rendering of two consecutive images
         scale: scaling factor for arrow length
         stride: skip pixels to avoid overcrowding, not draw an arrow on each pixel
+        time_frame: the time frame to be visualised or if time_frame=0 then the animation is visualised
         """
         mag = self.data_magnitude
-        vx = self.conversion_phase_to_velocity("LR") # velocity in nifti (so the (y, x, z) coordinates)
+        vx = self.conversion_phase_to_velocity("LR") # velocity in nifti
         vy = self.conversion_phase_to_velocity("AP")
         vz = self.conversion_phase_to_velocity("SI")
 
@@ -260,8 +280,8 @@ class StudyCaseNIfTI():
             xlabel, ylabel = "Anterior-Posterior", "Superior-Inferior"
 
         # Downsample to avoid too many arrows (we do some striding similar as we do on )
-        u = u_data[::stride, ::stride, 0]
-        v = v_data[::stride, ::stride, 0]
+        u = u_data[::stride, ::stride, time_frame]
+        v = v_data[::stride, ::stride, time_frame]
 
         vector_norm = np.sqrt(u**2 + v**2) # norm of the velocity
 
@@ -269,7 +289,7 @@ class StudyCaseNIfTI():
         Y, X = np.mgrid[0:magnitude_data.shape[0]:stride, 0:magnitude_data.shape[1]:stride]
 
         fig, ax = plt.subplots(1, 1, figsize=(12,4))
-        anatomical_view = ax.imshow(magnitude_data[..., 0].T, cmap='gray', origin='lower')
+        anatomical_view = ax.imshow(self.transform_rotate_slice(magnitude_data[:, :, time_frame], section), cmap='gray', origin='lower')
 
         norm = plt.Normalize(vmin=np.min(vector_norm), vmax=np.max(vector_norm))
         cmap = plt.colormaps['plasma']
@@ -294,16 +314,17 @@ class StudyCaseNIfTI():
         def update(frame):
             u = u_data[::stride, ::stride, frame]
             v = v_data[::stride, ::stride, frame]
-            mag_frame = magnitude_data[..., frame]
+            mag_frame = magnitude_data[:, :, frame]
 
             vector_norm = np.sqrt(u**2 + v**2)
-            quiv.set_UVC(v, u, vector_norm)
-            anatomical_view.set_data(mag_frame.T)
+            quiv.set_UVC(v, u, vector_norm) # updates the quiver plot (the vector fields) to be the one of the current time frame
+            anatomical_view.set_data(self.transform_rotate_slice(mag_frame, section)) # update the data of the magnitude to be the one of the current time frame
             ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={frame})")
             return quiv, anatomical_view
 
-        anim = FuncAnimation(fig, update, frames=50, interval=100, blit=False)
-        anim.save(f"velocity_{section}_slice_{slice_index}.gif", writer=PillowWriter(fps=100))
+        if time_frame == 0: # if we want an animation
+            anim = FuncAnimation(fig, update, frames=50, interval=interval, blit=False)
+            anim.save(f"velocity_{section}_slice_{slice_index}.gif", writer=PillowWriter(fps=interval))
         plt.tight_layout()
         plt.show()
 
@@ -354,7 +375,7 @@ class StudyCaseNIfTI():
         if max_wraps > 0:
             aliased_pixels_axial_slice = np.rot90(np.rot90(aliased_pixels[:, axial_slice_index, :].T))
             aliased_pixels_sagittal_slice = aliased_pixels[:, :, sagittal_slice_index]
-            aliased_pixels_coronal_slice = np.rot90(np.rot90(np.rot90(aliased_pixels[coronal_slice_index, :, :])))
+            aliased_pixels_coronal_slice = np.rot90(aliased_pixels[coronal_slice_index, :, :])
             for x in range(aliased_pixels_axial_slice.shape[0]):
                 for z in range(aliased_pixels_axial_slice.shape[1]):
                     n_wraps = aliased_pixels_axial_slice[x,z]
@@ -387,32 +408,32 @@ class StudyCaseNIfTI():
         venc: the new velocity encoding (venc) value used, this value must be under the venc of the acquisition to end up with simulated aliased voxels
         time_frame: the time frame on which we want to apply the simulation
         """
+        starting_time = time.time()
         phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)[:,:,:,time_frame]
         phase_data_after_aliasing = np.zeros_like(phase_data_before_aliasing)
         velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)[:,:,:,time_frame]
         velocity_post_aliasing = np.zeros_like(velocity_before_aliasing)
         acquisition_venc = self.get_venc(protocol)
 
-        aliased_pixels = np.zeros_like(velocity_before_aliasing)
+        aliased_pixels = np.floor((np.abs(velocity_before_aliasing) + venc) / (2 * venc)) # numpy array of the number of wraps for each pixel (so value=0 if no wraps so if not aliased)
 
         print(f"Simulating the aliasing effect on the protocol {protocol} with VENC={venc} instead of original VENC (acquisition VENC)={acquisition_venc}")
-        for x in range(velocity_before_aliasing.shape[0]):
-            for y in range(velocity_before_aliasing.shape[1]):
-                for z in range(velocity_before_aliasing.shape[2]):
-                    pixel_velocity = velocity_before_aliasing[x,y,z]
-                    while pixel_velocity > venc: 
-                        velocity_post_aliasing[x,y,z] = pixel_velocity - 2*venc
-                        pixel_velocity = velocity_post_aliasing[x,y,z]
-                        aliased_pixels[x,y,z] += 1 # in each cell there will be the number of wraps of the aliased pixel
-                    while pixel_velocity < -venc:
-                        velocity_post_aliasing[x,y,z] = pixel_velocity + 2*venc
-                        pixel_velocity = velocity_post_aliasing[x,y,z]
-                        aliased_pixels[x,y,z] += 1
-                    if pixel_velocity <= venc and pixel_velocity >= -venc:
-                        velocity_post_aliasing[x,y,z] = pixel_velocity
-                    phase_data_after_aliasing[x,y,z] = MAX_PIXEL_VALUE * velocity_post_aliasing[x,y,z] / venc # max_pixel_value * new_velocity_value / venc
-
-        return velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels
+        
+        velocity_post_aliasing = np.where(
+                velocity_before_aliasing > venc,
+                velocity_before_aliasing - 2 * venc * aliased_pixels, # we wrap the number of times as necessary
+                np.where(
+                    velocity_before_aliasing < -venc,
+                    velocity_before_aliasing + 2 * venc * aliased_pixels,
+                    velocity_before_aliasing
+                )
+            )
+        
+        phase_data_after_aliasing = MAX_PIXEL_VALUE * velocity_post_aliasing / venc
+        
+        duration = time.time() - starting_time
+        print(f"Duration of the simulation on one time frame: {duration}s")
+        return velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps
 
 nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_header("LR")
@@ -422,7 +443,8 @@ nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.visualize_slices(94, 189, 68,0,"LR")
 #nifti_file.visualize_slice("coronal", 189, 0,"LR")
 #nifti_file.get_venc("LR")
-nifti_file.visualize_velocity_vectors("sagittal", 73, 0, scale=1, stride=4)
-#nifti_file.visualize_velocity_slice("sagittal", 73, 0, "LR")
+#nifti_file.visualize_velocity_vectors("sagittal", 73, 100, scale=1, stride=4, time_frame=10)
+#nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
 #velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels = nifti_file.simulate_aliasing("LR", 50, 0)
 #nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, "LR", aliased_pixels, velocity_post_aliasing, 50)
+nifti_file.visualize_anatomy("sagittal", 127)
