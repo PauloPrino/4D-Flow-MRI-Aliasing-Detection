@@ -320,7 +320,7 @@ class StudyCaseNIfTI():
             headlength=4, # length of the head of the arrow
             headaxislength=3 # length of the body of the arrow
         )
-        cbar = fig.colorbar(quiv, ax=ax, label="Velocity norm (cm/s)")
+        fig.colorbar(quiv, ax=ax, label="Velocity norm (cm/s)")
         ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity field (t={time_frame})")
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -360,33 +360,33 @@ class StudyCaseNIfTI():
 
         # Line 1: non aliased
         axial_non_aliased_view = axes[0, 0].imshow(self.transform_rotate_slice(axial_slice_non_aliased, "axial"), cmap="gray", origin="lower")
-        axes[0, 0].set_title(f"Axial Slice (Non-Aliased) at y={axial_slice_index}")
+        axes[0, 0].set_title(f"Axial (Non-Aliased) at y={axial_slice_index} at t={time_frame}")
 
         coronal_non_aliased_view = axes[0, 1].imshow(self.transform_rotate_slice(coronal_slice_non_aliased, "coronal"), cmap="gray", origin="lower")
-        axes[0, 1].set_title(f"Coronal Slice (Non-Aliased) at x={coronal_slice_index}")
+        axes[0, 1].set_title(f"Coronal (Non-Aliased) at x={coronal_slice_index} at t={time_frame}")
 
         sagittal_non_aliased_view = axes[0, 2].imshow(self.transform_rotate_slice(sagittal_slice_non_aliased, "sagittal"), cmap="gray", origin="lower")
-        axes[0, 2].set_title(f"Sagittal Slice (Non-Aliased) at z={sagittal_slice_index}")
+        axes[0, 2].set_title(f"Sagittal (Non-Aliased) at z={sagittal_slice_index} at t={time_frame}")
 
         # Line 2: aliased
         axial_aliased_view = axes[1, 0].imshow(self.transform_rotate_slice(axial_slice_aliased, "axial"), cmap="gray", origin="lower")
-        axes[1, 0].set_title(f"Axial Slice (Aliased with VENC={new_venc}) at y={axial_slice_index}")
+        axes[1, 0].set_title(f"Axial (Aliased with VENC={new_venc}) at y={axial_slice_index} at t={time_frame}")
 
         coronal_aliased_view = axes[1, 1].imshow(self.transform_rotate_slice(coronal_slice_aliased, "coronal"), cmap="gray", origin="lower")
-        axes[1, 1].set_title(f"Coronal Slice (Aliased with VENC={new_venc}) at x={coronal_slice_index}")
+        axes[1, 1].set_title(f"Coronal (Aliased with VENC={new_venc}) at x={coronal_slice_index} at t={time_frame}")
 
         sagittal_aliased_view = axes[1, 2].imshow(self.transform_rotate_slice(sagittal_slice_aliased, "sagittal"), cmap="gray", origin="lower")
-        axes[1, 2].set_title(f"Sagittal Slice (Aliased with VENC={new_venc}) at z={sagittal_slice_index}")
+        axes[1, 2].set_title(f"Sagittal (Aliased with VENC={new_venc}) at z={sagittal_slice_index} at t={time_frame}")
 
         # Line 3: aliased on which we'll put the red dots to indicate aliased pixels
         axial_aliased_with_dots_view = axes[2, 0].imshow(self.transform_rotate_slice(axial_slice_aliased, "axial"), cmap="gray", origin="lower")
-        axes[2, 0].set_title(f"Axial Slice (Aliased with VENC={new_venc}) at y={axial_slice_index}")
+        axes[2, 0].set_title(f"Axial (Aliased with VENC={new_venc}) at y={axial_slice_index} at t={time_frame}")
 
         coronal_aliased_with_dots_view = axes[2, 1].imshow(self.transform_rotate_slice(coronal_slice_aliased, "coronal"), cmap="gray", origin="lower")
-        axes[2, 1].set_title(f"Coronal Slice (Aliased with VENC={new_venc}) at x={coronal_slice_index}")
+        axes[2, 1].set_title(f"Coronal (Aliased with VENC={new_venc}) at x={coronal_slice_index} at t={time_frame}")
 
         sagittal_aliased_with_dots_view = axes[2, 2].imshow(self.transform_rotate_slice(sagittal_slice_aliased, "sagittal"), cmap="gray", origin="lower")
-        axes[2, 2].set_title(f"Sagittal Slice (Aliased with VENC={new_venc}) at z={sagittal_slice_index}")
+        axes[2, 2].set_title(f"Sagittal (Aliased with VENC={new_venc}) at z={sagittal_slice_index} at t={time_frame}")
 
         fig.colorbar(axial_non_aliased_view, ax=axes[0,0], label="Velocity (cm/s)")
         fig.colorbar(coronal_non_aliased_view, ax=axes[0,1], label="Velocity (cm/s)")
@@ -402,31 +402,29 @@ class StudyCaseNIfTI():
         def plot_red_dots(aliased_pixels, axes, axial_slice_index, coronal_slice_index, sagittal_slice_index):
             max_wraps = np.max(aliased_pixels)
             if max_wraps > 0:
+                # Axial
                 aliased_pixels_axial_slice = self.transform_rotate_slice(aliased_pixels[:, axial_slice_index, :], "axial")
-                aliased_pixels_sagittal_slice = self.transform_rotate_slice(aliased_pixels[:, :, sagittal_slice_index], "sagittal")
-                aliased_pixels_coronal_slice = self.transform_rotate_slice(aliased_pixels[coronal_slice_index, :, :], "coronal")
-                for x in range(aliased_pixels_axial_slice.shape[0]):
-                    for z in range(aliased_pixels_axial_slice.shape[1]):
-                        n_wraps = aliased_pixels_axial_slice[x,z]
-                        if n_wraps > 0:
-                            color_intensity = min(1.0, n_wraps / max_wraps)
-                            color = (color_intensity, 0, 0)
-                            axes[2, 0].scatter(z, x, color=color, s=2)
-                for x in range(aliased_pixels_sagittal_slice.shape[0]):
-                    for y in range(aliased_pixels_sagittal_slice.shape[1]):
-                        n_wraps = aliased_pixels_sagittal_slice[x,y]
-                        if n_wraps > 0:
-                            color_intensity = min(1.0, n_wraps / max_wraps)
-                            color = (color_intensity, 0, 0)
-                            axes[2, 2].scatter(y, x, color=color, s=2)
-                for y in range(aliased_pixels_coronal_slice.shape[0]):
-                    for z in range(aliased_pixels_coronal_slice.shape[1]):
-                        n_wraps = aliased_pixels_coronal_slice[y,z]
-                        if n_wraps > 0:
-                            color_intensity = min(1.0, n_wraps / max_wraps)
-                            color = (color_intensity, 0, 0)
-                            axes[2, 1].scatter(z, y, color=color, s=2)
+                y_axial, x_axial = np.where(aliased_pixels_axial_slice > 0)
+                n_wraps_axial = aliased_pixels_axial_slice[y_axial, x_axial]
+                color_intensity_axial = np.minimum(1.0, n_wraps_axial / max_wraps)
+                colors_axial = np.column_stack([color_intensity_axial, np.zeros_like(color_intensity_axial), np.zeros_like(color_intensity_axial)])
+                axes[2, 0].scatter(x_axial, y_axial, color=colors_axial, s=2)
 
+                # Coronal
+                aliased_pixels_coronal_slice = self.transform_rotate_slice(aliased_pixels[coronal_slice_index, :, :], "coronal")
+                y_coronal, x_coronal = np.where(aliased_pixels_coronal_slice > 0)
+                n_wraps_coronal = aliased_pixels_coronal_slice[y_coronal, x_coronal]
+                color_intensity_coronal = np.minimum(1.0, n_wraps_coronal / max_wraps)
+                colors_coronal = np.column_stack([color_intensity_coronal, np.zeros_like(color_intensity_coronal), np.zeros_like(color_intensity_coronal)])
+                axes[2, 1].scatter(x_coronal, y_coronal, color=colors_coronal, s=2)
+
+                # Sagittal
+                aliased_pixels_sagittal_slice = self.transform_rotate_slice(aliased_pixels[:, :, sagittal_slice_index], "sagittal")
+                y_sagittal, x_sagittal = np.where(aliased_pixels_sagittal_slice > 0)
+                n_wraps_sagittal = aliased_pixels_sagittal_slice[y_sagittal, x_sagittal]
+                color_intensity_sagittal = np.minimum(1.0, n_wraps_sagittal / max_wraps)
+                colors_sagittal = np.column_stack([color_intensity_sagittal, np.zeros_like(color_intensity_sagittal), np.zeros_like(color_intensity_sagittal)])
+                axes[2, 2].scatter(x_sagittal, y_sagittal, color=colors_sagittal, s=2)
 
         plot_red_dots(aliased_pixels[:,:,:,time_frame], axes, axial_slice_index, coronal_slice_index, sagittal_slice_index)
 
@@ -440,22 +438,30 @@ class StudyCaseNIfTI():
             sagittal_slice_aliased = velocity_post_aliasing[:, :, sagittal_slice_index, frame]
             coronal_slice_aliased = velocity_post_aliasing[coronal_slice_index, :, :, frame]
             axial_slice_aliased = velocity_post_aliasing[:, axial_slice_index, :, frame]
-            # Mettre à jour les images non-aliased
+            # Update non-aliased images
             axial_non_aliased_view.set_data(self.transform_rotate_slice(axial_slice_non_aliased, "axial"))
+            axes[0,0].set_title(f"Axial (Non-Aliased) at y={axial_slice_index} at t={frame}")
             coronal_non_aliased_view.set_data(self.transform_rotate_slice(coronal_slice_non_aliased, "coronal"))
+            axes[0,1].set_title(f"Coronal (Non-Aliased) at x={coronal_slice_index} at t={frame}")
             sagittal_non_aliased_view.set_data(self.transform_rotate_slice(sagittal_slice_non_aliased, "sagittal"))
+            axes[0,2].set_title(f"Sagittal (Non-Aliased) at z={sagittal_slice_index} at t={frame}")
 
-            # Mettre à jour les images aliased
+            # Update aliased images
             axial_aliased_view.set_data(self.transform_rotate_slice(axial_slice_aliased, "axial"))
+            axes[1,0].set_title(f"Axial (Aliased with VENC={new_venc}) at y={axial_slice_index} at t={frame}")
             coronal_aliased_view.set_data(self.transform_rotate_slice(coronal_slice_aliased, "coronal"))
+            axes[1,1].set_title(f"Coronal (Aliased with VENC={new_venc}) at x={coronal_slice_index} at t={frame}")
             sagittal_aliased_view.set_data(self.transform_rotate_slice(sagittal_slice_aliased, "sagittal"))
+            axes[1,2].set_title(f"Sagittal (Aliased with VENC={new_venc}) at z={sagittal_slice_index} at t={frame}")
 
-            # Mettre à jour les images aliased avec les red dots
+            # Update aliased images with red dots
             axial_aliased_with_dots_view.set_data(self.transform_rotate_slice(axial_slice_aliased, "axial"))
+            axes[2,0].set_title(f"Axial (Aliased with VENC={new_venc}) at y={axial_slice_index} at t={frame}")
             coronal_aliased_with_dots_view.set_data(self.transform_rotate_slice(coronal_slice_aliased, "coronal"))
+            axes[2,1].set_title(f"Coronal (Aliased with VENC={new_venc}) at x={coronal_slice_index} at t={frame}")
             sagittal_aliased_with_dots_view.set_data(self.transform_rotate_slice(sagittal_slice_aliased, "sagittal"))
+            axes[2,2].set_title(f"Sagittal (Aliased with VENC={new_venc}) at z={sagittal_slice_index} at t={frame}")
 
-            # Tracer les red dots pour le frame actuel
             plot_red_dots(aliased_pixels[:,:,:,frame], axes, axial_slice_index, coronal_slice_index, sagittal_slice_index)
 
             return axial_non_aliased_view, coronal_non_aliased_view, sagittal_non_aliased_view, \
@@ -480,12 +486,12 @@ class StudyCaseNIfTI():
         if time_frame:
             phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)[:,:,:,time_frame]
         else:
-            phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)[:,:,:,:]
+            phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)
         phase_data_after_aliasing = np.zeros_like(phase_data_before_aliasing)
         if time_frame:
             velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)[:,:,:,time_frame]
         else:
-            velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)[:,:,:,:]
+            velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)
         velocity_post_aliasing = np.zeros_like(velocity_before_aliasing)
         acquisition_venc = self.get_venc(protocol)
 
@@ -503,12 +509,12 @@ class StudyCaseNIfTI():
                 )
             )
         
-        phase_data_after_aliasing = MAX_PIXEL_VALUE * velocity_post_aliasing / venc
-        
+        phase_data_after_aliasing = velocity_post_aliasing * MAX_PIXEL_VALUE / venc
+                
         duration = time.time() - starting_time
-        print(f"Duration of the simulation on one time frame: {duration}s")
+        print(f"Duration of the simulation: {duration}s")
         print(aliased_pixels.shape)
-        return velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps
+        return velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps (value=1 if pixel aliased otherwise value=0)
 
 nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_header("LR")
@@ -520,6 +526,6 @@ nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_venc("LR")
 #nifti_file.visualize_velocity_vectors("coronal", 160, 100, scale=2, stride=4, time_frame=0, mask=True)
 #nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
-velocity_post_aliasing, phase_data_after_aliasing, aliased_pixels = nifti_file.simulate_aliasing("LR", 50, None)
+velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing = nifti_file.simulate_aliasing("LR", 50, None)
 nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, 100, "LR", aliased_pixels, velocity_post_aliasing, 50)
 #nifti_file.visualize_anatomy("coronal", 166)
