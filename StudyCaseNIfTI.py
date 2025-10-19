@@ -1,10 +1,10 @@
 import nibabel as nib
 import matplotlib.pyplot as plt
 import numpy as np
-import GetMetadataDICOM
 import time
 from matplotlib.animation import FuncAnimation, PillowWriter
 import random
+import json
 
 MAX_PIXEL_VALUE = 32768 # encoded in int16
 
@@ -14,10 +14,10 @@ class StudyCaseNIfTI():
         study_path: path to the folder of the study
         """
         self.study_path = study_path
-        self.nifti_magnitude_path = study_path + "/" + study_path.split("/")[1] + ".nii.gz" # the file path of the magnitude (so the anatomy)
-        self.nifti_LR_flow_path = study_path + "/" + study_path.split("/")[1] + "_e2.nii.gz" # the file path of the LR (Left-Right so axis x) of the blood flow
-        self.nifti_AP_flow_path = study_path + "/" + study_path.split("/")[1] + "_e3.nii.gz" # the file path of the AP (Anterior-Posterior so axis y) of the blood flow
-        self.nifti_SI_flow_path = study_path + "/" + study_path.split("/")[1] + "_e4.nii.gz" # the file path of the LR (Superior-Inferior so axis z) of the blood flow
+        self.nifti_magnitude_path = study_path + "/" + study_path.split("/")[-1] + ".nii.gz" # the file path of the magnitude (so the anatomy)
+        self.nifti_LR_flow_path = study_path + "/" + study_path.split("/")[-1] + "_e2.nii.gz" # the file path of the LR (Left-Right so axis x) of the blood flow
+        self.nifti_AP_flow_path = study_path + "/" + study_path.split("/")[-1] + "_e3.nii.gz" # the file path of the AP (Anterior-Posterior so axis y) of the blood flow
+        self.nifti_SI_flow_path = study_path + "/" + study_path.split("/")[-1] + "_e4.nii.gz" # the file path of the LR (Superior-Inferior so axis z) of the blood flow
         self.nifti_magnitude = nib.load(self.nifti_magnitude_path) # loading the NIfTI file
         self.nifti_LR_flow = nib.load(self.nifti_LR_flow_path)
         self.nifti_AP_flow = nib.load(self.nifti_AP_flow_path)
@@ -74,33 +74,16 @@ class StudyCaseNIfTI():
             return self.data_AP_flow
         if protocol == "SI":
             return self.data_SI_flow
-
-    def get_venc(self, protocol):
-        """
-        INPUT:
-            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
-
-        OUTPUT: 
-            - venc: the velocity encoding of the protocol chosen
-        """
-        study_case_path = self.study_path.replace("_NIfTI","")
-        dicom_study_case = GetMetadataDICOM.StudyCaseDICOM(study_case_path)
-        venc = dicom_study_case.get_venc(protocol)
-        return venc
-    
-    def get_venc_scale(self, protocol):
-        """
-        INPUT:
-            - protocol: the protocol chosen amongst magnitude(anatomy), LR(Left-Right flow), AP(Anterior-Posterior flow), SI(Superior-Inferior flow)
         
-        OUTPUT:
-            - venc_scale: the velocity encoding scale
-        """
-        study_case_path = self.study_path.replace("_NIfTI","")
-        dicom_study_case = GetMetadataDICOM.StudyCaseDICOM(study_case_path)
-        venc_scale = dicom_study_case.get_velocity_encode_scale(protocol)
-        print(f"Velocity encoding scale = {venc_scale}s/mm")
-        return venc_scale
+    def get_element_from_dicom_header(self, protocol, element_name):
+        json_file = self.correspondance_nifti_file_path_protocol(protocol).replace(".nii.gz", "_dicom_header.json")
+
+        with open(json_file, "r") as f:
+            data = json.load(f)
+
+        for key, value in data.items():
+            if key == element_name:
+                return value["value"]
 
     def get_header(self, protocol):
         nifti_file = self.correspondance_nifti_file_protocol(protocol)
@@ -138,6 +121,10 @@ class StudyCaseNIfTI():
         number_of_frames = data.shape[3]
         print(f"Number of time frames for the protocol {protocol}: {number_of_frames}")
         return number_of_frames
+    
+    def get_3D_volume(self, time_frame, flow_direction):
+        data = self.correspondance_nifti_data_protocol(flow_direction)
+        return data[:,:,:,time_frame]
 
     def get_slice(self, section, slice_index, time_frame, protocol):
         data = self.correspondance_nifti_data_protocol(protocol)
@@ -153,7 +140,7 @@ class StudyCaseNIfTI():
         return slice
     
     def get_slice_velocity(self, time_frame, section, protocol, slice_index):
-        venc = self.get_venc(protocol)
+        venc = float(self.get_element_from_dicom_header(protocol, "[Velocity encoding]"))
         protocol_data = self.correspondance_nifti_data_protocol(protocol)
         velocity_data = (protocol_data[:, :, :, time_frame] / MAX_PIXEL_VALUE) * venc # in cm/s
         if section == "sagittal":
@@ -246,7 +233,7 @@ class StudyCaseNIfTI():
         """
         Converts phase data (direct data comming from the MRI machine) to velocity data using the venc value
         """
-        venc = self.get_venc(protocol)
+        venc = float(self.get_element_from_dicom_header(protocol, "[Velocity encoding]"))
         protocol_data = self.correspondance_nifti_data_protocol(protocol)
         print(f"Converting phase pixel values into velocities for protocol {protocol} using VENC={venc}cm/s")
         velocities = (protocol_data / MAX_PIXEL_VALUE) * venc
@@ -493,7 +480,7 @@ class StudyCaseNIfTI():
         else:
             velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)
         velocity_post_aliasing = np.zeros_like(velocity_before_aliasing)
-        acquisition_venc = self.get_venc(protocol)
+        acquisition_venc = float(self.get_element_from_dicom_header(protocol, "[Velocity encoding]"))
 
         aliased_pixels = np.floor((np.abs(velocity_before_aliasing) + venc) / (2 * venc)) # numpy array of the number of wraps for each pixel (so value=0 if no wraps so if not aliased)
 
@@ -516,14 +503,14 @@ class StudyCaseNIfTI():
         print(aliased_pixels.shape)
         return velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps (value=1 if pixel aliased otherwise value=0)
 
-nifti_file = StudyCaseNIfTI("Dataset/IRM_BAO_069_1_4D_NIfTI")
+nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_header("LR")
 #nifti_file.get_image_shape_by_section("coronal","LR")
 #nifti_file.get_number_of_slices_by_section("coronal","LR")
 #nifti_file.get_number_of_time_frames("LR")
 #nifti_file.visualize_slices(94, 189, 68,0,"LR")
 #nifti_file.visualize_slice("coronal", 189, 0,"LR")
-#nifti_file.get_venc("LR")
+#print(f"Velocity encoding: {nifti_file.get_element_from_dicom_header("LR", "[Velocity encoding]")}")
 #nifti_file.visualize_velocity_vectors("coronal", 160, 100, scale=2, stride=4, time_frame=0, mask=True)
 #nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
 velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing = nifti_file.simulate_aliasing("LR", 50, None)

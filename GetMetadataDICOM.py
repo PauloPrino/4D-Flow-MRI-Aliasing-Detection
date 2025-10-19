@@ -51,4 +51,5 @@ class StudyCaseDICOM():
             print(f"Velocity Encoding Scale found (tag {venc_scale_tag}): {hdr[venc_scale_tag].value}cm/s/rad") # venc_scale = venc / pi
         return venc_scale
     
-study_case_dicom = StudyCaseDICOM("Dataset/IRM_BAO_069_1_4D")
+study_case_dicom = StudyCaseDICOM("Test/input/IRM_BAO_069_1_4D")
+print(study_case_dicom.get_header("magnitude", 1))
