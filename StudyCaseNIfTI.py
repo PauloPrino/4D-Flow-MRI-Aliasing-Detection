@@ -5,6 +5,7 @@ import time
 from matplotlib.animation import FuncAnimation, PillowWriter
 import random
 import json
+import os
 
 MAX_PIXEL_VALUE = 32768 # encoded in int16
 
@@ -14,18 +15,18 @@ class StudyCaseNIfTI():
         study_path: path to the folder of the study
         """
         self.study_path = study_path
-        self.nifti_magnitude_path = study_path + "/" + study_path.split("/")[-1] + ".nii.gz" # the file path of the magnitude (so the anatomy)
-        self.nifti_LR_flow_path = study_path + "/" + study_path.split("/")[-1] + "_e2.nii.gz" # the file path of the LR (Left-Right so axis x) of the blood flow
-        self.nifti_AP_flow_path = study_path + "/" + study_path.split("/")[-1] + "_e3.nii.gz" # the file path of the AP (Anterior-Posterior so axis y) of the blood flow
-        self.nifti_SI_flow_path = study_path + "/" + study_path.split("/")[-1] + "_e4.nii.gz" # the file path of the LR (Superior-Inferior so axis z) of the blood flow
+        self.nifti_magnitude_path = study_path + "/" + os.path.basename(study_path) + ".nii.gz" # the file path of the magnitude (so the anatomy)
+        self.nifti_LR_flow_path = study_path + "/" + os.path.basename(study_path) + "_e2.nii.gz" # the file path of the LR (Left-Right so axis x) of the blood flow
+        self.nifti_AP_flow_path = study_path + "/" + os.path.basename(study_path) + "_e3.nii.gz" # the file path of the AP (Anterior-Posterior so axis y) of the blood flow
+        self.nifti_SI_flow_path = study_path + "/" + os.path.basename(study_path) + "_e4.nii.gz" # the file path of the LR (Superior-Inferior so axis z) of the blood flow
         self.nifti_magnitude = nib.load(self.nifti_magnitude_path) # loading the NIfTI file
         self.nifti_LR_flow = nib.load(self.nifti_LR_flow_path)
         self.nifti_AP_flow = nib.load(self.nifti_AP_flow_path)
         self.nifti_SI_flow = nib.load(self.nifti_SI_flow_path)
-        self.data_magnitude = self.nifti_magnitude.get_fdata(dtype=np.float32) # transform the image to a numpy array
-        self.data_LR_flow = self.nifti_LR_flow.get_fdata(dtype=np.float32) # dtype float32 to not take too much memory space (4 bytes only as int16 is only 2 bytes)
-        self.data_AP_flow = self.nifti_AP_flow.get_fdata(dtype=np.float32)
-        self.data_SI_flow = self.nifti_SI_flow.get_fdata(dtype=np.float32)
+        self.data_magnitude = np.asarray(self.nifti_magnitude.dataobj, dtype=np.uint16) # transform the image to a numpy array
+        self.data_LR_flow = np.asarray(self.nifti_LR_flow.dataobj, dtype=np.int16) # dtype int16 to not take too much memory space (as int16 is only 2 bytes and the original files come in with phase values encoded in int16 for flows and uint16 for magnitude)
+        self.data_AP_flow = np.asarray(self.nifti_AP_flow.dataobj, dtype=np.int16)
+        self.data_SI_flow = np.asarray(self.nifti_SI_flow.dataobj, dtype=np.int16)
     
     def correspondance_nifti_file_path_protocol(self, protocol):
         """
@@ -234,7 +235,7 @@ class StudyCaseNIfTI():
         Converts phase data (direct data comming from the MRI machine) to velocity data using the venc value
         """
         venc = float(self.get_element_from_dicom_header(protocol, "[Velocity encoding]"))
-        protocol_data = self.correspondance_nifti_data_protocol(protocol)
+        protocol_data = self.correspondance_nifti_data_protocol(protocol).astype(np.float32)
         print(f"Converting phase pixel values into velocities for protocol {protocol} using VENC={venc}cm/s")
         velocities = (protocol_data / MAX_PIXEL_VALUE) * venc
         return velocities
@@ -330,14 +331,14 @@ class StudyCaseNIfTI():
         plt.show()
 
 
-    def visualize_aliasing_simulation(self, axial_slice_index, coronal_slice_index, sagittal_slice_index, time_frame, interval, protocol, aliased_pixels, velocity_post_aliasing, new_venc):
+    def visualize_aliasing_simulation(self, axial_slice_index, coronal_slice_index, sagittal_slice_index, time_frame, interval, flow_direction, aliased_pixels, velocity_post_aliasing, new_venc):
         """
         Visualize slices before and after aliasing simulation.
         """
         print(f"Starting to plot the aliased simulation...")
-        sagittal_slice_non_aliased = self.get_slice_velocity(time_frame, "sagittal", protocol, sagittal_slice_index)
-        coronal_slice_non_aliased = self.get_slice_velocity(time_frame, "coronal", protocol, coronal_slice_index)
-        axial_slice_non_aliased = self.get_slice_velocity(time_frame, "axial", protocol, axial_slice_index)
+        sagittal_slice_non_aliased = self.get_slice_velocity(time_frame, "sagittal", flow_direction, sagittal_slice_index)
+        coronal_slice_non_aliased = self.get_slice_velocity(time_frame, "coronal", flow_direction, coronal_slice_index)
+        axial_slice_non_aliased = self.get_slice_velocity(time_frame, "axial", flow_direction, axial_slice_index)
 
         sagittal_slice_aliased = velocity_post_aliasing[:, :, sagittal_slice_index, time_frame]
         coronal_slice_aliased = velocity_post_aliasing[coronal_slice_index, :, :, time_frame]
@@ -418,9 +419,9 @@ class StudyCaseNIfTI():
 
         def update(frame):
             print(f"Rendering frame {frame}")
-            sagittal_slice_non_aliased = self.get_slice_velocity(frame, "sagittal", protocol, sagittal_slice_index)
-            coronal_slice_non_aliased = self.get_slice_velocity(frame, "coronal", protocol, coronal_slice_index)
-            axial_slice_non_aliased = self.get_slice_velocity(frame, "axial", protocol, axial_slice_index)
+            sagittal_slice_non_aliased = self.get_slice_velocity(frame, "sagittal", flow_direction, sagittal_slice_index)
+            coronal_slice_non_aliased = self.get_slice_velocity(frame, "coronal", flow_direction, coronal_slice_index)
+            axial_slice_non_aliased = self.get_slice_velocity(frame, "axial", flow_direction, axial_slice_index)
 
             sagittal_slice_aliased = velocity_post_aliasing[:, :, sagittal_slice_index, frame]
             coronal_slice_aliased = velocity_post_aliasing[coronal_slice_index, :, :, frame]
@@ -459,32 +460,31 @@ class StudyCaseNIfTI():
             anim = FuncAnimation(fig, update, frames=50, interval=interval, blit=False)
             anim.save(f"aliasing_simulation_animation.gif", writer=PillowWriter(fps=interval))
 
-        plt.tight_layout()
-        plt.show()
+        #plt.tight_layout()
+        #plt.show()
 
-    def simulate_aliasing(self, protocol, venc, time_frame):
+    def simulate_aliasing(self, flow_direction, venc, time_frame):
         """
         Simultes the aliasing effect by virtually decreasing the VENC lower than the one of the acquisition to end up with velocities above +venc and under -venc to have aliased voxels
-        protocol: the protocol on which the aliasing effect is simulated ("LR", "AP" or "SI")
+        flow_direction: the flow_direction on which the aliasing effect is simulated ("LR", "AP" or "SI")
         venc: the new velocity encoding (venc) value used, this value must be under the venc of the acquisition to end up with simulated aliased voxels
         time_frame: the time frame on which we want to apply the simulation
         """
         starting_time = time.time()
         if time_frame:
-            phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)[:,:,:,time_frame]
+            phase_data_before_aliasing = self.correspondance_nifti_data_protocol(flow_direction)[:,:,:,time_frame]
+            velocity_before_aliasing = self.conversion_phase_to_velocity(flow_direction)[:,:,:,time_frame]
         else:
-            phase_data_before_aliasing = self.correspondance_nifti_data_protocol(protocol)
+            phase_data_before_aliasing = self.correspondance_nifti_data_protocol(flow_direction)
+            velocity_before_aliasing = self.conversion_phase_to_velocity(flow_direction)
+
         phase_data_after_aliasing = np.zeros_like(phase_data_before_aliasing)
-        if time_frame:
-            velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)[:,:,:,time_frame]
-        else:
-            velocity_before_aliasing = self.conversion_phase_to_velocity(protocol)
-        velocity_post_aliasing = np.zeros_like(velocity_before_aliasing)
-        acquisition_venc = float(self.get_element_from_dicom_header(protocol, "[Velocity encoding]"))
+        velocity_post_aliasing = np.zeros_like(velocity_before_aliasing) # float32
+        acquisition_venc = float(self.get_element_from_dicom_header(flow_direction, "[Velocity encoding]"))
 
-        aliased_pixels = np.floor((np.abs(velocity_before_aliasing) + venc) / (2 * venc)) # numpy array of the number of wraps for each pixel (so value=0 if no wraps so if not aliased)
+        aliased_pixels = np.floor((np.abs(velocity_before_aliasing) + venc) / (2 * venc)).astype(bool) # numpy array of the number of wraps for each pixel (so value=0 if no wraps so if not aliased), we precise the type bool to take only 1 byte
 
-        print(f"Simulating the aliasing effect on the protocol {protocol} with VENC={venc} instead of original VENC (acquisition VENC)={acquisition_venc}")
+        print(f"Simulating the aliasing effect on the flow direction {flow_direction} with VENC={venc} instead of original VENC (acquisition VENC)={acquisition_venc}")
         
         velocity_post_aliasing = np.where(
                 velocity_before_aliasing > venc,
@@ -496,14 +496,13 @@ class StudyCaseNIfTI():
                 )
             )
         
-        phase_data_after_aliasing = velocity_post_aliasing * MAX_PIXEL_VALUE / venc
+        phase_data_after_aliasing = (velocity_post_aliasing * MAX_PIXEL_VALUE / venc).astype(np.int16)
                 
         duration = time.time() - starting_time
         print(f"Duration of the simulation: {duration}s")
-        print(aliased_pixels.shape)
         return velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps (value=1 if pixel aliased otherwise value=0)
 
-nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
+#nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_header("LR")
 #nifti_file.get_image_shape_by_section("coronal","LR")
 #nifti_file.get_number_of_slices_by_section("coronal","LR")
@@ -513,6 +512,6 @@ nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
 #print(f"Velocity encoding: {nifti_file.get_element_from_dicom_header("LR", "[Velocity encoding]")}")
 #nifti_file.visualize_velocity_vectors("coronal", 160, 100, scale=2, stride=4, time_frame=0, mask=True)
 #nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
-velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing = nifti_file.simulate_aliasing("LR", 50, None)
-nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, 100, "LR", aliased_pixels, velocity_post_aliasing, 50)
+#velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing = nifti_file.simulate_aliasing("LR", 50, None)
+#nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, 100, "LR", aliased_pixels, velocity_post_aliasing, 50)
 #nifti_file.visualize_anatomy("coronal", 166)
