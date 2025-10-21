@@ -1,15 +1,9 @@
-import UNET
+import UNET_2D
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from torchvision import transforms
-
-data_preprocessing = transforms.Compose([
-    transforms.Resize((256, 256)), # resizing to 256x256 to avoid using too much memory but still keep enough detail
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), # normalizing
-])
 
 running_device = ""
 if torch.cuda.is_available():
@@ -19,38 +13,100 @@ else:
     print("CUDA not available so running on CPU")
     running_device = "cpu"
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = UNET.UNET(in_channels=3, out_channels=1, init_features=32).to(device) # out_channels=1 for binary segmentation
+device = torch.device(running_device)
+model = UNET_2D.UNET(in_channels=1, out_channels=1, init_features=8).to(device) # out_channels=1 for binary segmentation
 
-model.load_state_dict(torch.load("unet_model.pth", weights_only=True))
+model.load_state_dict(torch.load("MRI_UNET_3D.pth", weights_only=True))
 model.eval()
 
-def plot_results(image, mask, pred_mask):
-    plt.figure(figsize=(12, 4))
-    plt.subplot(131)
-    plt.imshow(image.squeeze(), cmap='gray')
-    plt.title("MRI Image")
-    plt.subplot(132)
-    plt.imshow(mask.squeeze(), cmap='gray')
-    plt.title("Grond truth mask")
-    plt.subplot(133)
-    plt.imshow(pred_mask.detach().squeeze().cpu().numpy(), cmap='gray')
-    plt.title("Predicted mask")
-    plt.show()
+volume_3D_path = "Dataset/CleanData/3DVolumes/IRM_BAO_069_1_4D_NIfTI_AP_t0.npy"
+mask_path = "Dataset/CleanData/Masks/IRM_BAO_069_1_4D_NIfTI_AP_t0.npy"
 
-image_np = plt.imread("swimseg-2/test/0913.png") # image loaded as a numpy array
-mask_np = plt.imread("swimseg-2/test_labels/0913.png")
+volume_3D = np.load(volume_3D_path).astype(np.float32) # loading the 3D volume that is saved as a numpy array and converting it to float32 as PyTorch uses floats and not int
+mask = np.load(mask_path).astype(np.float32)
 
-# If the image is float, convert to uint8
-if image_np.dtype == np.float32 or image_np.dtype == np.float64:
-    image_np = (255 * image_np).astype(np.uint8)
-if mask_np.dtype == np.float32 or mask_np.dtype == np.float64:
-    mask_np = (255 * mask_np).astype(np.uint8)
+volume_3D = (volume_3D - volume_3D.min()) / (volume_3D.max() - volume_3D.min()) # normalize the values between 0 and 1: [0,1]
 
-image = Image.fromarray(image_np) # converting from numpy to PIL
+volume_3D = torch.from_numpy(volume_3D) # convert to tensor
+mask = torch.from_numpy(mask)
 
-input_tensor = data_preprocessing(image).unsqueeze(0).to(device)
+input_tensor = volume_3D.unsqueeze(0).unsqueeze(0).to(device) # twice unsqueeze because need to add dimension 1 for batch and for channels
 
 predicted_mask = torch.sigmoid(model(input_tensor))
 predicted_mask_binary = (predicted_mask > 0.5).float() # predicted binary mask so only 0 and 1 values
-plot_results(image_np, mask_np, predicted_mask_binary.cpu())
+
+def transform_rotate_slice(slice, section_name):
+        if section_name == "axial":
+            return np.rot90(np.rot90(slice))
+        if section_name == "coronal":
+            return np.rot90(np.rot90(np.rot90(slice.T)))
+        if section_name == "sagittal":
+            return slice.T
+
+def visualize_slices_and_masks(axial_slice_index, coronal_slice_index, sagittal_slice_index):
+        """
+        Visualize slices, ground truth mask and predicted mask
+        """
+        print(f"Starting to plot the aliased simulation...")
+        volume_3D = np.load(volume_3D_path)
+        ground_truth_mask = np.load(mask_path)
+
+        sagittal_slice = volume_3D[:,:,sagittal_slice_index]
+        coronal_slice = volume_3D[coronal_slice_index,:,:]
+        axial_slice = volume_3D[:,axial_slice_index,:]
+
+        sagittal_mask_predicted = predicted_mask_binary[:,:,sagittal_slice_index]
+        coronal_mask_predicted = predicted_mask_binary[coronal_slice_index,:,:]
+        axial_mask_predicted = predicted_mask_binary[:,axial_slice_index,:]
+
+        sagittal_mask_ground_truth = ground_truth_mask[:,:,sagittal_slice_index]
+        coronal_mask_ground_truth = ground_truth_mask[coronal_slice_index,:,:]
+        axial_mask_ground_truth = ground_truth_mask[:,axial_slice_index,:]
+
+        fig, axes = plt.subplots(3, 3, figsize=(18, 12)) # 3 lines (one for the slices and one for the predicted masks and one for the ground truth masks) and 3 columns (for the 3 different sections)
+
+        # Line 1: slices
+        axial_slice_view = axes[0, 0].imshow(transform_rotate_slice(axial_slice, "axial"), cmap="gray", origin="lower")
+        axes[0, 0].set_title(f"Axial (Non-Aliased) at y={axial_slice_index}")
+
+        coronal_slice_view = axes[0, 1].imshow(transform_rotate_slice(coronal_slice, "coronal"), cmap="gray", origin="lower")
+        axes[0, 1].set_title(f"Coronal (Non-Aliased) at x={coronal_slice_index}")
+
+        sagittal_slice_view = axes[0, 2].imshow(transform_rotate_slice(sagittal_slice, "sagittal"), cmap="gray", origin="lower")
+        axes[0, 2].set_title(f"Sagittal (Non-Aliased) at z={sagittal_slice_index}")
+
+        # Line 2: predicted masks
+        axial_mask_predicted_view = axes[1, 0].imshow(transform_rotate_slice(axial_mask_predicted, "axial"), cmap="gray", origin="lower")
+        axes[1, 0].set_title(f"Axial mask predicted at y={axial_slice_index}")
+
+        coronal_mask_predicted_view = axes[1, 1].imshow(transform_rotate_slice(coronal_mask_predicted, "coronal"), cmap="gray", origin="lower")
+        axes[1, 1].set_title(f"Coronal mask predicted at x={coronal_slice_index}")
+
+        sagittal_mask_predicted_view = axes[1, 2].imshow(transform_rotate_slice(sagittal_mask_predicted, "sagittal"), cmap="gray", origin="lower")
+        axes[1, 2].set_title(f"Sagittal mask predicted at z={sagittal_slice_index}")
+
+        # Line 3: ground truth masks
+        axial_mask_ground_truth_view = axes[2, 0].imshow(transform_rotate_slice(axial_mask_ground_truth, "axial"), cmap="gray", origin="lower")
+        axes[2, 0].set_title(f"Axial mask ground truth at y={axial_slice_index}")
+
+        coronal_mask_ground_truth_view = axes[2, 1].imshow(transform_rotate_slice(coronal_mask_ground_truth, "coronal"), cmap="gray", origin="lower")
+        axes[2, 1].set_title(f"Coronal mask ground truth at x={coronal_slice_index}")
+
+        sagittal_mask_ground_truth_view = axes[2, 2].imshow(transform_rotate_slice(sagittal_mask_ground_truth, "sagittal"), cmap="gray", origin="lower")
+        axes[2, 2].set_title(f"Sagittal mask ground truth at z={sagittal_slice_index}")
+
+
+        fig.colorbar(axial_slice_view, ax=axes[0,0], label="Phase value")
+        fig.colorbar(coronal_slice_view, ax=axes[0,1], label="Phase value")
+        fig.colorbar(sagittal_slice_view, ax=axes[0,2], label="Phase value")
+        fig.colorbar(axial_mask_predicted_view, ax=axes[1,0], label="Phase value")
+        fig.colorbar(coronal_mask_predicted_view, ax=axes[1,1], label="Phase value")
+        fig.colorbar(sagittal_mask_predicted_view, ax=axes[1,2], label="Phase value")
+        fig.colorbar(axial_mask_ground_truth_view, ax=axes[2,0], label="Phase value")
+        fig.colorbar(coronal_mask_ground_truth_view, ax=axes[2,1], label="Phase value")
+        fig.colorbar(sagittal_mask_ground_truth_view, ax=axes[2,2], label="Phase value")
+
+        plt.tight_layout()
+        plt.show()
+
+visualize_slices_and_masks(94, 189, 68)
