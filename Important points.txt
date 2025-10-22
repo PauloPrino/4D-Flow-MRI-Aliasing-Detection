@@ -1,0 +1,4 @@
+- what is aliasing and how it can be handled
+- optimize storage as much as possible: 
+	- use .nii format and even better .nii.gz format
+	- play on the encoding types (dtype) in the numpy arrays to save VRAM space when loading live arrays and also when saving files as .npy
