@@ -456,12 +456,12 @@ class StudyCaseNIfTI():
                 axial_aliased_view, coronal_aliased_view, sagittal_aliased_view, \
                 axial_aliased_with_dots_view, coronal_aliased_with_dots_view, sagittal_aliased_with_dots_view
 
-        if time_frame == 0: # if we want an animation
+        if time_frame == 0: # if we want an animation then we save it as a gif and not show it with pyplot because it is laggy
             anim = FuncAnimation(fig, update, frames=50, interval=interval, blit=False)
             anim.save(f"aliasing_simulation_animation.gif", writer=PillowWriter(fps=interval))
-
-        #plt.tight_layout()
-        #plt.show()
+        else: # if it is only rendering one time frame then we can immediately plot it
+            plt.tight_layout()
+            plt.show()
 
     def simulate_aliasing(self, flow_direction, venc, time_frame):
         """

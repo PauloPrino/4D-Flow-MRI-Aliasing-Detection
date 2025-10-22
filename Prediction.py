@@ -2,8 +2,7 @@ import UNET_3D
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
-from torchvision import transforms
+import time
 
 running_device = ""
 if torch.cuda.is_available():
@@ -97,7 +96,7 @@ def predict_aliased_pixels(model: UNET_3D.UNET_3D, input_3D_volume: str, ground_
         - ground_truth_mask: the ground truth mask of aliased voxels
         - weight_file: the .pth file in which the weights are stored
     """
-
+    start_time = time.time()
     model.load_state_dict(torch.load(weight_file, weights_only=True))
     model.eval()
 
@@ -114,6 +113,7 @@ def predict_aliased_pixels(model: UNET_3D.UNET_3D, input_3D_volume: str, ground_
     predicted_mask = torch.sigmoid(model(input_tensor))
     predicted_mask_binary = (predicted_mask > 0.5).float() # predicted binary mask so only 0 and 1 values
     predicted_mask_binary = predicted_mask_binary.squeeze().cpu().numpy() # we squeeze to not have the  dimension of channels and batches and put it to the cpu and go from a tensor to a numpy array
+    print(f"Prediction time for one 3D volume at on time frame: {time.time() - start_time}")
 
     visualize_slices_and_masks(94, 189, 68, predicted_mask_binary)
 

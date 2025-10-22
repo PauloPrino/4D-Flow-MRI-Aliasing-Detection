@@ -1,14 +1,12 @@
 import torch
 import UNET_3D
-from torchvision import datasets, transforms
 import torch.optim as optim
 import MRIDataset
 import matplotlib.pyplot as plt
 from torch.utils.data import random_split
-import os
-from PIL import Image
-import numpy as np
+import time
 
+start_time = time.time()
 num_epochs = 2
 
 def dice_loss(model_output, masks, smooth=1.0): # model_output : the predicted mask by the model (an image of 0 and 1, non aliased and aliased pixels)
@@ -146,6 +144,7 @@ with torch.no_grad():
 print(f"Test Loss: {test_loss:.4f}")
 print(f"Test IoU accuracy: {IoU*100}%")
 
+print(f"Training duration: {time.time() - start_time}s")
 torch.save(model.state_dict(), "MRI_UNET_3D.pth")
 
 def plot_losses():
@@ -179,4 +178,3 @@ def plot_accuracies():
     plt.ylabel('IoU accuracy (%)')
 
 plot_accuracies()
-
