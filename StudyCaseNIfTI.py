@@ -177,31 +177,21 @@ class StudyCaseNIfTI():
     def visualize_anatomy(self, section, slice_index):
         slice = self.data_magnitude[slice_index, :, :, 0]
 
-        fig, axes = plt.subplots(1, 1, figsize=(12, 4))
-
-        view = axes.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
-        
-        axes.set_title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
-
-        fig.colorbar(view, ax=axes, label="Phase value")
-
+        plt.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
+        plt.title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
+        plt.colorbar(label="Magnitude value")
         plt.tight_layout()
         plt.show()
 
-    def visualize_slice(self, section, slice_index, time_frame, protocol):
+    def visualize_slice(self, section, slice_index, time_frame, flow_direction):
         """
         Visualize a slice with the phase values
         """
-        slice = self.get_slice(section, slice_index, time_frame, protocol)
+        slice = self.get_slice(section, slice_index, time_frame, flow_direction)
 
-        fig, axes = plt.subplots(1, 1, figsize=(12, 4))
-
-        view = axes.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
-        
-        axes.set_title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
-
-        fig.colorbar(view, ax=axes, label="Phase value")
-
+        plt.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
+        plt.title(f"{section} Slice at position ={slice_index} of {flow_direction} flow direction") # the pixels on the image are velocities in the direction perpendicular to the section
+        plt.colorbar(label="Phase value")
         plt.tight_layout()
         plt.show()
 
@@ -502,7 +492,7 @@ class StudyCaseNIfTI():
         print(f"Duration of the simulation: {duration}s")
         return velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps (value=1 if pixel aliased otherwise value=0)
 
-#nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
+nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_header("LR")
 #nifti_file.get_image_shape_by_section("coronal","LR")
 #nifti_file.get_number_of_slices_by_section("coronal","LR")
@@ -514,4 +504,4 @@ class StudyCaseNIfTI():
 #nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
 #velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing = nifti_file.simulate_aliasing("LR", 50, None)
 #nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, 100, "LR", aliased_pixels, velocity_post_aliasing, 50)
-#nifti_file.visualize_anatomy("coronal", 166)
+nifti_file.visualize_anatomy("coronal", 166)
