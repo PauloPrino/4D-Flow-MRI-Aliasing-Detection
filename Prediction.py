@@ -22,13 +22,13 @@ def transform_rotate_slice(slice, section_name):
         if section_name == "sagittal":
             return slice.T
 
-def visualize_slices_and_masks(axial_slice_index, coronal_slice_index, sagittal_slice_index, predicted_mask_binary):
+def visualize_slices_and_masks(axial_slice_index, coronal_slice_index, sagittal_slice_index, predicted_mask_binary, ground_truth_mask_path):
         """
         Visualize slices, ground truth mask and predicted mask
         """
         print(f"Starting to plot the aliased simulation...")
         volume_3D = np.load(volume_3D_path)
-        ground_truth_mask = np.load(mask_path)
+        ground_truth_mask = np.load(ground_truth_mask_path)
 
         sagittal_slice = volume_3D[:,:,sagittal_slice_index]
         coronal_slice = volume_3D[coronal_slice_index,:,:]
@@ -88,38 +88,64 @@ def visualize_slices_and_masks(axial_slice_index, coronal_slice_index, sagittal_
         plt.tight_layout()
         plt.show()
 
-def predict_aliased_pixels(model: UNET_3D.UNET_3D, input_3D_volume: str, ground_truth_mask:str, weight_file:str):
+def predict_aliased_pixels_on_file(model: UNET_3D.UNET_3D, input_3D_volume_path: str, weight_file_path:str):
     """
     INPUT:
         - model: the model architecture we want to use 
-        - input_3D_volume: the 3D volume on which we want to determine through our deep learning model which voxels are aliased
-        - ground_truth_mask: the ground truth mask of aliased voxels
-        - weight_file: the .pth file in which the weights are stored
+        - input_3D_volume_path: the 3D volume on which we want to determine through our deep learning model which voxels are aliased
+        - weight_file_path: the .pth file in which the weights are stored
+    OUTPUT:
+        - the predicted mask
     """
     start_time = time.time()
-    model.load_state_dict(torch.load(weight_file, weights_only=True))
+    model.load_state_dict(torch.load(weight_file_path, weights_only=True))
     model.eval()
 
-    volume_3D = np.load(input_3D_volume).astype(np.float32) # loading the 3D volume that is saved as a numpy array and converting it to float32 as PyTorch uses floats and not int
-    mask = np.load(ground_truth_mask).astype(np.float32)
+    volume_3D = np.load(input_3D_volume_path).astype(np.float32) # loading the 3D volume that is saved as a numpy array and converting it to float32 as PyTorch uses floats and not int
 
     volume_3D = (volume_3D - volume_3D.min()) / (volume_3D.max() - volume_3D.min()) # normalize the values between 0 and 1: [0,1]
 
     volume_3D = torch.from_numpy(volume_3D) # convert to tensor
-    mask = torch.from_numpy(mask)
 
     input_tensor = volume_3D.unsqueeze(0).unsqueeze(0).to(device) # twice unsqueeze because need to add dimension 1 for batch and for channels
 
     predicted_mask = torch.sigmoid(model(input_tensor))
     predicted_mask_binary = (predicted_mask > 0.5).float() # predicted binary mask so only 0 and 1 values
     predicted_mask_binary = predicted_mask_binary.squeeze().cpu().numpy() # we squeeze to not have the  dimension of channels and batches and put it to the cpu and go from a tensor to a numpy array
-    print(f"Prediction time for one 3D volume at on time frame: {time.time() - start_time}")
+    print(f"Prediction time for one 3D volume at one time frame: {time.time() - start_time}s")
+    return predicted_mask_binary
 
-    visualize_slices_and_masks(94, 189, 68, predicted_mask_binary)
+def predict_aliased_pixels_on_array(model: UNET_3D.UNET_3D, input_3D_volume: np.array, weight_file_path:str):
+    """
+    INPUT:
+        - model: the model architecture we want to use 
+        - input_3D_volume: the 3D volume on which we want to determine through our deep learning model which voxels are aliased
+        - weight_file_path: the .pth file in which the weights are stored
+    OUTPUT:
+        - the predicted mask
+    """
+    start_time = time.time()
+    model.load_state_dict(torch.load(weight_file_path, weights_only=True))
+    model.eval()
+
+    volume_3D = np.load(input_3D_volume).astype(np.float32) # loading the 3D volume that is saved as a numpy array and converting it to float32 as PyTorch uses floats and not int
+
+    volume_3D = (volume_3D - volume_3D.min()) / (volume_3D.max() - volume_3D.min()) # normalize the values between 0 and 1: [0,1]
+
+    volume_3D = torch.from_numpy(volume_3D) # convert to tensor
+
+    input_tensor = volume_3D.unsqueeze(0).unsqueeze(0).to(device) # twice unsqueeze because need to add dimension 1 for batch and for channels
+
+    predicted_mask = torch.sigmoid(model(input_tensor))
+    predicted_mask_binary = (predicted_mask > 0.5).float() # predicted binary mask so only 0 and 1 values
+    predicted_mask_binary = predicted_mask_binary.squeeze().cpu().numpy() # we squeeze to not have the  dimension of channels and batches and put it to the cpu and go from a tensor to a numpy array
+    print(f"Prediction time for one 3D volume at one time frame: {time.time() - start_time}s")
+    return predicted_mask_binary
 
 model = UNET_3D.UNET_3D(in_channels=1, out_channels=1, init_features=8).to(device) # out_channels=1 for binary segmentation
 
 volume_3D_path = "Dataset/CleanData/3DVolumes/IRM_BAO_069_1_4D_NIfTI_AP_t0.npy"
-mask_path = "Dataset/CleanData/Masks/IRM_BAO_069_1_4D_NIfTI_AP_t0.npy"
+ground_truth_mask_path = "Dataset/CleanData/Masks/IRM_BAO_069_1_4D_NIfTI_AP_t0.npy"
 
-predict_aliased_pixels(model, volume_3D_path, mask_path, "MRI_UNET_3D.pth")
+predicted_mask_binary = predict_aliased_pixels_on_file(model, volume_3D_path, "MRI_UNET_3D.pth")
+visualize_slices_and_masks(94, 189, 68, predicted_mask_binary, ground_truth_mask_path)

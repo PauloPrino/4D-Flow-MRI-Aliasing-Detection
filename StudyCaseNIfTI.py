@@ -6,6 +6,9 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 import random
 import json
 import os
+import Prediction
+import UNET_3D
+import torch
 
 MAX_PIXEL_VALUE = 32768 # encoded in int16
 
@@ -27,6 +30,18 @@ class StudyCaseNIfTI():
         self.data_LR_flow = np.asarray(self.nifti_LR_flow.dataobj, dtype=np.int16) # dtype int16 to not take too much memory space (as int16 is only 2 bytes and the original files come in with phase values encoded in int16 for flows and uint16 for magnitude)
         self.data_AP_flow = np.asarray(self.nifti_AP_flow.dataobj, dtype=np.int16)
         self.data_SI_flow = np.asarray(self.nifti_SI_flow.dataobj, dtype=np.int16)
+        self.device = self.get_available_device()
+
+    def get_available_device(self):
+        running_device = ""
+        if torch.cuda.is_available():
+            print("CUDA available so running on GPU")
+            running_device = "cuda"
+        else:
+            print("CUDA not available so running on CPU")
+            running_device = "cpu"
+
+        device = torch.device(running_device)
     
     def correspondance_nifti_file_path_protocol(self, protocol):
         """
@@ -141,7 +156,7 @@ class StudyCaseNIfTI():
         return slice
     
     def get_slice_velocity(self, time_frame, section, protocol, slice_index):
-        venc = float(self.get_element_from_dicom_header(protocol, "[Velocity encoding]"))
+        venc = float(self.get_element_from_dicom_header(protocol, ))
         protocol_data = self.correspondance_nifti_data_protocol(protocol)
         velocity_data = (protocol_data[:, :, :, time_frame] / MAX_PIXEL_VALUE) * venc # in cm/s
         if section == "sagittal":
@@ -174,12 +189,13 @@ class StudyCaseNIfTI():
 
         return axial_view, coronal_view, sagittal_view
 
-    def visualize_anatomy(self, section, slice_index):
-        slice = self.data_magnitude[slice_index, :, :, 0]
+    def visualize_anatomy(self, section, slice_index, time_frame):
+        slice = self.get_slice(section, slice_index, time_frame, "magnitude")
 
         plt.imshow(self.transform_rotate_slice(slice, section), cmap="gray", origin="lower")
         plt.title(f"{section} Slice at position ={slice_index}") # the pixels on the image are velocities in the direction perpendicular to the section
         plt.colorbar(label="Magnitude value")
+
         plt.tight_layout()
         plt.show()
 
@@ -211,14 +227,13 @@ class StudyCaseNIfTI():
 
         fig, ax = plt.subplots(figsize=(6, 6))
         im = ax.imshow(self.transform_rotate_slice(slice_velocity, section), cmap="seismic", origin="lower")
-        ax.set_title(f"{section.capitalize()} slice {slice_index} - Velocity (cm/s)")
-        cbar = fig.colorbar(im, ax=ax, label="Velocity (cm/s)")
+        ax.set_title(f"{section.capitalize()} slice {slice_index} at t={time_frame}")
+        fig.colorbar(im, ax=ax, label="Velocity (cm/s)")
         plt.show()
 
     def create_mask_from_magnitude(self, magnitude_data, threshold=0.1):
         mask = magnitude_data > threshold
         return mask.astype(np.uint8)
-
 
     def conversion_phase_to_velocity(self, protocol):
         """
@@ -492,6 +507,29 @@ class StudyCaseNIfTI():
         print(f"Duration of the simulation: {duration}s")
         return velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing # aliased pixels is the mask of the aliased pixels with values equal to the number of wraps (value=1 if pixel aliased otherwise value=0)
 
+    def get_aliased_pixels(self, flow_direction, time_frame):
+        """
+        Use a deep learning model that detects aliased pixels
+        """
+        model = UNET_3D.UNET_3D(in_channels=1, out_channels=1, init_features=8).to(self.device) # out_channels=1 for binary segmentation
+        volume_3D = self.correspondance_nifti_data_protocol(flow_direction)[:,:,:,time_frame]
+        
+        aliased_pixels = Prediction.predict_aliased_pixels_on_array(model, volume_3D, "MRI_UNET_3D.pth")
+
+        return aliased_pixels
+
+    """
+    def unwrap_aliased_pixels(self):
+        flow_directions = ["LR", "AP", "SI"]
+        for flow_direction in flow_directions:
+            flow_direction_data = self.correspondance_nifti_data_protocol(flow_direction)
+            venc = self.get_element_from_dicom_header(flow_direction, "[Velocity encoding]")
+            for t in range(50):
+                aliased_pixels = self.get_aliased_pixels(flow_direction, t)
+    """
+
+        
+
 nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.get_header("LR")
 #nifti_file.get_image_shape_by_section("coronal","LR")
@@ -504,4 +542,4 @@ nifti_file = StudyCaseNIfTI("Dataset/RawData/IRM_BAO_069_1_4D_NIfTI")
 #nifti_file.visualize_velocity_slice("coronal", 175, 0, "LR")
 #velocity_post_aliasing, aliased_pixels, phase_data_after_aliasing = nifti_file.simulate_aliasing("LR", 50, None)
 #nifti_file.visualize_aliasing_simulation(94, 189, 68, 0, 100, "LR", aliased_pixels, velocity_post_aliasing, 50)
-nifti_file.visualize_anatomy("coronal", 166)
+#nifti_file.visualize_anatomy("axial", 80, 0)

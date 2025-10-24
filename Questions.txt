@@ -4,3 +4,11 @@
 
 - comment eux ils enlèvent le problème du zéro pcq sinon ca peut tout à fait être un sujet que je traite en même temps pcq la le pb du zéro ca gâche tout
 	ce que je peux facilement essayer c que je prend deux trois time frames aléatoirement et je regarde si les valeurs de vélocités sont les mêmes, si se sont les mêmes alors on a un pb, c que certainement ce pixel est censé avoir une vélocité à 0
+
+- est-ce que ca vous intéresse les several wraps ou un seul c'est vrmt le cas le plus courant
+
+- est-ce qu'on va jusqu'à la correction des pixels aliasés ou on s'arrête juste à la détection:
+	- pcq on finit avec un problème: si on veut uwrap les pixels aliasés alors on doit choisir si on fait + ou - 2*venc et ca avec juste l'info pixel aliasé 0 ou 1, on ne l'a pas
+	- donc dans ce cas deux approches possibles:
+		- soit on entraine pour qu'il sorte pas seulement pixel aliasé et non aliasé en masque binaire mais l'info plus précise d'aliasé dans quel sens
+		- soit on reste classique masque binaire et au moment d'unwrap on regarde les pixels aux alentours pour avoir l'info de est-ce qu'il faut faire + ou - selon les direction des autres vélocités
